@@ -73,7 +73,7 @@ live_score <- live_data$live_score
 
 ```{r}
 #Youtube API
-api_key <- "AIzaSyAKRrREUZ9W46S6eXGpICKqb0SgOitS_vw"
+api_key <- "redacted"
 
 # Initialize vectors to store results
 channel_ids <- character(length(youtube_usernames))  # Empty vector to store channel IDs
@@ -175,7 +175,7 @@ print(instagram_followers)
 library(httr)
 
 # Define the refresh token
-refresh_token <- "fXQXFgijQ9ez5pgt0ZqRrQu1BPE4GTxK2m1W3e7yAKKDirzfpZUNZj5UTklZlaSo"
+refresh_token <- "redacted"
 
 # Define the API URL
 url <- "https://api.chartmetric.com/api/token"
@@ -527,7 +527,7 @@ library(jsonlite)
 # Function to get artists based on social index (like Spotify Monthly Listeners, Instagram Followers, etc.)
 get_artists_by_social_index <- function(sort_by, limit = 100, offset = 1, recent_release_within = 99999999999999) {
   # Construct the API URL
-  url <- paste0("https://api.chartmetric.com/api/artist/anr/by/social-index?sortBy=", sort_by,
+  url <- paste0("redacted", sort_by,
                 "&limit=", limit,
                 "&offset=", offset,
                 "&recentReleaseWithin=", recent_release_within)
@@ -659,8 +659,8 @@ library(httr)
 library(jsonlite)
 
 # Set your client credentials
-client_id <- "9c1a455fbe7c4d99a45ad2f1789dd80c"
-client_secret <- "21293fa04d9847c391e2d7420b760827"
+client_id <- "redacted"
+client_secret <- "redacted"
 
 # Function to get the access token using Client Credentials Flow
 get_access_token <- function(client_id, client_secret) {
