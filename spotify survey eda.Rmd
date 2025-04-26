@@ -1,0 +1,531 @@
+---
+title: "spotify survey eda"
+author: "Elena Flauto -- 505697812"
+date: "2025-02-04"
+output: pdf_document
+---
+```{r}
+survey_data <- read.csv("capstone data - survey data.csv")[, -c(1, 2)]
+for(i in 3:18){
+  survey_data[,i] <- as.numeric(survey_data[,i])
+}
+
+survey_data
+dim(survey_data)
+summary(survey_data)
+
+par(mfrow=c(3,4))
+numeric_cols <- colnames(survey_data)[3:18]
+for (i in numeric_cols){
+  hist(survey_data[,i], main = i, xlab = i)
+}
+```
+About the data:
+ 76 rows x 20 fields
+
+
+Check assumptions
+```{r}
+differences <- survey_data$ea_ts - survey_data$ea_fv
+hist(differences) # To check for normality
+qqnorm(differences) # Q-Q plot to check normality visually
+plot(differences)
+abline(a = 0, b = 1, col = "red", lty = 2)
+
+```
+
+Paired t-test: If the p-value is less than your significance level (usually 0.05), you can reject the null hypothesis and conclude that there is a statistically significant difference between the two versions in terms of price willingness.
+
+Wilcoxon test: Similarly, if the p-value is below 0.05, you can conclude that there is a significant difference in the amounts participants are willing to pay for the two versions.
+
+```{r}
+# Calculate the average price each participant is willing to pay for Version 1 and Version 2
+survey_data$ts_avg = rowMeans(survey_data[, 3:10])
+survey_data$fv_avg = rowMeans(survey_data[, 11:18])
+
+# View the data with averages
+head(survey_data)
+
+differences_avg <- survey_data$ts_avg - survey_data$fv_avg
+hist(differences_avg) # To check for normality
+qqnorm(differences_avg) # Q-Q plot to check normality visually
+plot(differences_avg)
+abline(a = 0, b = 1, col = "red", lty = 2)
+
+# Perform a paired t-test to compare the averages for Version 1 and Version 2
+t_test_result <- t.test(survey_data$ts_avg,survey_data$fv_avg, paired = TRUE)
+print(t_test_result)
+
+wilcoxon_result <- wilcox.test(survey_data$ts_avg,survey_data$fv_avg, paired = TRUE)
+print(wilcoxon_result)
+
+boxplot(survey_data$ts_avg, survey_data$fv_avg,
+        names = c("Top Streamed", "Favorite"),
+        main = "Comparison of Top-Streamed vs. Favorite Artists Models",
+        ylab = "Average Willing Additional Monthly Payment",
+        col="#1ED760")
+
+print(summary(survey_data$ts_avg))
+print(summary(survey_data$fv_avg))
+```
+
+check for outliers
+```{r}
+# Boxplot for checking outliers
+boxplot(survey_data$ts_avg, main = "Boxplot of Version1_Avg")
+
+# Scatterplot matrix for checking relationships between predictors
+pairs(survey_data[,3:10])
+
+# Boxplot for checking outliers
+boxplot(survey_data$fv_avg, main = "Boxplot of Version2_Avg")
+
+# Scatterplot matrix for checking relationships between predictors
+pairs(survey_data[,11:18])
+
+```
+
+maximize features in each version
+1) linear reg Warning: essentially perfect fit: summary may be unreliable
+```{r}
+lm_model_ts <- lm(survey_data$ts_avg ~ ea_ts + merch_ts + unr_ts + snk_ts + disc_ts + win_ts + mix_ts + hq_ts, data = survey_data)
+summary(lm_model_ts)
+lm_model_fv <- lm(survey_data$fv_avg ~ ea_fv + merch_fv + unr_fv + snk_fv + disc_fv + win_fv + stem_fv + hq_fv, data = survey_data)
+summary(lm_model_fv)
+```
+
+due to warning, check for multicollinearity
+```{r}
+library(car)
+
+# Check VIF for your predictors (Version 1 features in this case)
+vif(lm(survey_data$ts_avg ~ ea_ts + merch_ts + unr_ts + snk_ts + disc_ts + win_ts + mix_ts + hq_ts, data = survey_data))
+vif(lm(survey_data$fv_avg ~ ea_fv + merch_fv + unr_fv + snk_fv + disc_fv + win_fv + stem_fv + hq_fv, data = survey_data))
+
+# Calculate the correlation matrix for your predictors
+cor_matrix_ts <- cor(survey_data[, 3:10])
+cor_matrix_fv <- cor(survey_data[, 11:18])
+colnames(cor_matrix_ts) <- c("ea tickets", "merch", "unreleased", "sneak peek", "discount tix", "giveaway", "stems", "hq audio")
+rownames(cor_matrix_ts) <- c("ea tickets", "merch", "unreleased", "sneak peek", "discount tix", "giveaway", "stems", "hq audio")
+colnames(cor_matrix_fv) <- c("ea tickets", "merch", "unreleased", "sneak peek", "discount tix", "giveaway", "stems", "hq audio")
+rownames(cor_matrix_fv) <- c("ea tickets", "merch", "unreleased", "sneak peek", "discount tix", "giveaway", "stems", "hq audio")
+
+my_col <- colorRampPalette(c("#000000", "#ff66c4", "#1ed760"))(200)
+# Visualize the correlation matrix
+library(corrplot)
+corrplot(cor_matrix_ts, method = "circle", type = "upper", order = "hclust", col = my_col, tl.col = "black")
+corrplot(cor_matrix_fv, method = "circle", type = "upper", order = "hclust", col = my_col, tl.col = "black")
+
+```
+If you find any pairs of predictors that are highly correlated (e.g., ea_ts and merch_ts), you may need to:
+Remove one of the variables.
+Combine highly correlated variables (e.g., by taking their average or using principal component analysis).
+
+
+2) regularization
+lasso regression
+```{r}
+library(glmnet)
+
+# Lasso regression for Version 1 (regularization)
+lasso_model_ts <- glmnet(as.matrix(survey_data[, 3:10]), survey_data$ts_avg, alpha = 1)
+coef_lasso_model_ts <- coef(lasso_model_ts)
+
+# Lasso regression for Version 2
+lasso_model_fv <- glmnet(as.matrix(survey_data[, 11:18]), survey_data$fv_avg, alpha = 1)
+coef_lasso_model_fv <- coef(lasso_model_fv)
+
+# Plot the coefficients for Lasso
+plot(lasso_model_ts, main = "Lasso Regression - Top Streamed Artists")
+plot(lasso_model_fv, main = "Lasso Regression - Favorite Artists")
+
+```
+
+```{r}
+# Get the coefficients across all lambda values
+coef_lasso_ts <- as.matrix(coef(lasso_model_ts))
+coef_lasso_fv <- as.matrix(coef(lasso_model_fv))
+
+# Convert to a dataframe for better viewing
+coef_lasso_ts_df <- as.data.frame(coef_lasso_ts)
+coef_lasso_fv_df <- as.data.frame(coef_lasso_fv)
+
+# View coefficients for Version 1 and Version 2
+print(coef_lasso_ts_df)
+print(coef_lasso_fv_df)
+
+# # Extract non-zero coefficients for Version 1
+# non_zero_coef_ts <- coef_lasso_model_ts[coef_lasso_model_ts != 0]
+# print(non_zero_coef_ts)
+# # Extract non-zero coefficients for Version 2
+# non_zero_coef_fv <- coef_lasso_model_fv[coef_lasso_model_fv != 0]
+# print(non_zero_coef_fv)
+
+
+```
+Lasso Regression helps to shrink coefficients for less important features to zero, thus effectively selecting only the most influential features.
+Look at the non-zero coefficients to determine which features are most important in driving willingness to pay.
+
+ridge regression
+```{r}
+library(glmnet)
+# Prepare your data (make sure it's in matrix form for glmnet)
+X_ts <- as.matrix(survey_data[, 3:10])
+y_ts <- survey_data$ts_avg  # Replace with your target variable for Version 1
+
+X_fv <- as.matrix(survey_data[, 11:18])
+y_fv <- survey_data$fv_avg  # Replace with your target variable for Version 1
+
+# Fit Ridge (alpha = 0 for Ridge)
+ridge_model_ts <- glmnet(X_ts, y_ts, alpha = 0)
+ridge_model_fv <- glmnet(X_fv, y_fv, alpha = 0)
+
+# View the coefficients for both models
+coef_ridge_ts <- as.matrix(coef(ridge_model_ts))
+coef_ridge_fv <- as.matrix(coef(ridge_model_fv))
+
+# Convert to a dataframe for better viewing
+coef_ridge_ts_df <- as.data.frame(coef_ridge_ts)
+coef_ridge_fv_df <- as.data.frame(coef_ridge_fv)
+
+# View coefficients for Version 1 and Version 2
+print(coef_ridge_ts_df)
+print(coef_ridge_fv_df)
+
+```
+
+cross validation
+```{r}
+# Perform cross-validation to select the best lambda for Lasso
+cv_lasso_ts <- cv.glmnet(X_ts, y_ts, alpha = 1)
+cv_lasso_fv <- cv.glmnet(X_fv, y_fv, alpha = 1)
+
+# Plot cross-validation results for Lasso
+plot(cv_lasso_ts)
+plot(cv_lasso_fv)
+
+# Best lambda for Lasso
+best_lambda_lasso_ts <- cv_lasso_ts$lambda.min
+coef(cv_lasso_ts, s = "lambda.min")
+
+best_lambda_lasso_fv <- cv_lasso_fv$lambda.min
+coef(cv_lasso_fv, s = "lambda.min")
+
+## ridge
+# Perform cross-validation to select the best lambda for Lasso
+cv_lasso_ts_ridge <- cv.glmnet(X_ts, y_ts, alpha = 0)
+cv_lasso_fv_ridge <- cv.glmnet(X_fv, y_fv, alpha = 0)
+
+# Plot cross-validation results for Lasso
+plot(cv_lasso_ts_ridge)
+plot(cv_lasso_fv_ridge)
+
+# Best lambda for Lasso
+best_lambda_lasso_ts_ridge <- cv_lasso_ts_ridge$lambda.min
+coef(cv_lasso_ts_ridge, s = "lambda.min")
+
+best_lambda_lasso_fv_ridge <- cv_lasso_fv_ridge$lambda.min
+coef(cv_lasso_fv_ridge, s = "lambda.min")
+```
+
+3) *random forest
+```{r}
+library(randomForest)
+
+rf_model_ts <- randomForest(survey_data$ts_avg ~ ea_ts + merch_ts + unr_ts + snk_ts + disc_ts + win_ts + mix_ts + hq_ts, data = survey_data)
+print(rf_model_ts$importance)
+
+rf_model_fv <- randomForest(survey_data$fv_avg ~ ea_fv + merch_fv + unr_fv + snk_fv + disc_fv + win_fv + stem_fv + hq_fv, data = survey_data)
+print(rf_model_fv$importance)
+
+# Example: Bar plot for feature importance from the random forest model
+importance_ts <- rf_model_ts$importance
+importance_fv <- rf_model_fv$importance
+
+# Bar plot for Version 1
+barplot(importance_ts[,1], names.arg = c("ea tickets", "merch", "unreleased", "sneak peek", "discount tix", "giveaway", "stems", "hq audio"), main = "Feature Importance - Top-Streamed", 
+        col = "#1ED760", las = 2)
+
+# Bar plot for Version 2
+barplot(importance_fv[,1], names.arg = c("ea tickets", "merch", "unreleased", "sneak peek", "discount tix", "giveaway", "stems", "hq audio"), main = "Feature Importance - Favorite Artists", 
+        col = "#1ED760", las = 2)
+
+```
+```{r}
+# Load necessary libraries
+library(randomForest)
+library(caret)
+library(ggplot2)
+
+# Split the data into training and testing sets
+set.seed(123) # Set seed for reproducibility
+trainIndex <- createDataPartition(survey_data$ts_avg, p = 0.8, list = FALSE, times = 1)
+train_data <- survey_data[trainIndex,]
+test_data <- survey_data[-trainIndex,]
+
+# Checking the dimensions of the training and testing data
+dim(train_data)
+dim(test_data)
+
+# Set up 10-fold cross-validation
+train_control <- trainControl(method = "cv", number = 10, verboseIter = TRUE)
+
+# Train Random Forest for Top-Streamed Tier (ts_avg) using cross-validation
+rf_model_ts_cv <- train(
+  ts_avg ~ ea_ts + merch_ts + unr_ts + snk_ts + disc_ts + win_ts + mix_ts + hq_ts,
+  data = train_data,
+  method = "rf",
+  trControl = train_control
+)
+
+# Train Random Forest for Favorite-Artists Tier (fv_avg) using cross-validation
+rf_model_fv_cv <- train(
+  fv_avg ~ ea_fv + merch_fv + unr_fv + snk_fv + disc_fv + win_fv + stem_fv + hq_fv,
+  data = train_data,
+  method = "rf",
+  trControl = train_control
+)
+
+# Print the model performance (Accuracy and other metrics from cross-validation)
+print(rf_model_ts_cv)
+print(rf_model_fv_cv)
+
+# Predict on the test data using the models trained via cross-validation
+predictions_ts <- predict(rf_model_ts_cv, newdata = test_data)
+predictions_fv <- predict(rf_model_fv_cv, newdata = test_data)
+
+# Evaluate the model performance using RMSE, R-squared, etc.
+# For Top-Streamed model
+rf_model_ts_cv_rmse <- sqrt(mean((predictions_ts - test_data$ts_avg)^2))
+rf_model_ts_cv_r2 <- cor(predictions_ts, test_data$ts_avg)^2
+
+# For Favorite-Artists model
+rf_model_fv_cv_rmse <- sqrt(mean((predictions_fv - test_data$fv_avg)^2))
+rf_model_fv_cv_r2 <- cor(predictions_fv, test_data$fv_avg)^2
+
+# Print RMSE and R-squared values
+cat("Top-Streamed Model RMSE:", rf_model_ts_cv_rmse, "\n")
+cat("Top-Streamed Model R-squared:", rf_model_ts_cv_r2, "\n")
+cat("Favorite-Artists Model RMSE:", rf_model_fv_cv_rmse, "\n")
+cat("Favorite-Artists Model R-squared:", rf_model_fv_cv_r2, "\n")
+
+# Feature importance for Top-Streamed model
+importance_ts <- rf_model_ts_cv$finalModel$importance
+importance_fv <- rf_model_fv_cv$finalModel$importance
+
+# Bar plot for Top-Streamed Tier
+barplot(importance_ts[,1], names.arg = c("ea tickets", "merch", "unreleased", "sneak peek", "discount tix", "giveaway", "stems", "hq audio"), 
+        main = "Feature Importance - Top-Streamed", col = "#1ED760", las = 2)
+
+# Bar plot for Favorite-Artists Tier
+barplot(importance_fv[,1], names.arg = c("ea tickets", "merch", "unreleased", "sneak peek", "discount tix", "giveaway", "stems", "hq audio"), 
+        main = "Feature Importance - Favorite Artists", col = "#1ED760", las = 2)
+
+```
+```{r}
+# Create a new row for testing with specific feature offerings
+# Define feature names
+features <- c("ea_ts", "merch_ts", "unr_ts", "snk_ts", "disc_ts", "win_ts", "mix_ts", "hq_ts")
+
+# Create a dataframe of all possible combinations of 0 and 1 for each feature
+combinations <- expand.grid(rep(list(c(0, 1)), length(features)))
+
+# Set column names to be the feature names
+colnames(combinations) <- features
+
+# View the first few rows of the combinations dataframe
+head(combinations)
+
+# Assuming you have a trained model `rf_model_ts`
+predictions <- predict(rf_model_ts_cv, combinations)
+
+# Add predictions to the combinations dataframe
+combinations$predicted_willingness_to_pay_ts <- predictions
+
+for (i in 1:nrow(combinations)) {
+  cat("Combination:", paste(combinations[i,], collapse = ", "), "\n")
+  cat("Predicted willingness to pay: $", predictions[i], "\n")
+  cat("--------------------------\n")
+}
+
+
+features <- c("ea_fv", "merch_fv", "unr_fv", "snk_fv", "disc_fv", "win_fv", "stem_fv", "hq_fv")
+
+# Create a dataframe of all possible combinations of 0 and 1 for each feature
+combinations <- expand.grid(rep(list(c(0, 1)), length(features)))
+colnames(combinations) <- features
+predictions <- predict(rf_model_fv_cv, combinations)
+
+# Add predictions to the combinations dataframe
+combinations$predicted_willingness_to_pay_fv <- predictions
+
+for (i in 1:nrow(combinations)) {
+  cat("Combination:", paste(combinations[i,], collapse = ", "), "\n")
+  cat("Predicted willingness to pay: $", predictions[i], "\n")
+  cat("--------------------------\n")
+}
+
+```
+
+partial dependence plot
+```{r}
+library(pdp)
+library(ggplot2)
+
+# # Create partial dependence plot for a feature (e.g., "ea_ts")
+# pdp_ts_1 <- partial(rf_model_ts, pred.var = "ea_ts")
+# plot(pdp_ts_1, main = "Partial Dependence Plot for Top Streamed (Early Access)")
+# 
+# pdp_ts_2 <- partial(rf_model_ts, pred.var = "merch_ts")
+# plot(pdp_ts_2, main = "Partial Dependence Plot for Top Streamed (Merch)")
+
+# List of columns to loop over
+feature_columns_ts <- c("ea_ts", "merch_ts", "unr_ts", "snk_ts", "disc_ts", "win_ts", "mix_ts", "hq_ts")
+
+# Create an empty plot list to store each individual plot
+pdp_plots <- list()
+
+# Loop over each feature and generate the PDP
+for (feature in feature_columns_ts) {
+  
+  # Generate the PDP for the current feature
+  pdp_data_ts <- partial(rf_model_ts, pred.var = feature, chull = TRUE)
+  
+  # Create a PDP plot with ggplot
+  pdp_plot_ts <- ggplot(pdp_data_ts, aes_string(x = feature, y = "yhat")) +
+    geom_line(aes(color = feature), size = 1.2) +  # Plot the line for the PDP
+    geom_point(aes(color = feature), size = 2) +    # Add points to the plot
+    labs(title = paste("PDP for", feature), 
+         x = feature, 
+         y = "Predicted Willingness to Pay") +
+    theme_minimal() +
+    theme(legend.position = "none")  # Remove the legend for clean visualization
+  
+  # Add the plot to the list
+  pdp_plots[[feature]] <- pdp_plot_ts
+}
+
+# Print the PDP plots for each feature
+pdp_plots[["ea_ts"]]  # For example, print the PDP for the first feature
+pdp_plots[["merch_ts"]] 
+pdp_plots[["unr_ts"]]
+pdp_plots[["snk_ts"]]
+pdp_plots[["disc_ts"]]
+pdp_plots[["win_ts"]]
+pdp_plots[["mix_ts"]]
+pdp_plots[["hq_ts"]]
+
+```
+
+```{r}
+library(pdp)
+# List of columns to loop over
+feature_columns_fv <- c("ea_fv", "merch_fv", "unr_fv", "snk_fv", "disc_fv", "win_fv", "stem_fv", "hq_fv")
+
+# Create an empty plot list to store each individual plot
+pdp_plots <- list()
+
+# Loop over each feature and generate the PDP
+for (feature in feature_columns_fv) {
+  
+  # Generate the PDP for the current feature
+  pdp_data_fv <- partial(rf_model_fv, pred.var = feature, chull = TRUE)
+  
+  # Create a PDP plot with ggplot
+  pdp_plot_fv <- ggplot(pdp_data_fv, aes_string(x = feature, y = "yhat")) +
+    geom_line(aes(color = feature), size = 1.2) +  # Plot the line for the PDP
+    geom_point(aes(color = feature), size = 2) +    # Add points to the plot
+    labs(title = paste("PDP for", feature), 
+         x = feature, 
+         y = "Predicted Willingness to Pay") +
+    theme_minimal() +
+    theme(legend.position = "none")  # Remove the legend for clean visualization
+  
+  # Add the plot to the list
+  pdp_plots[[feature]] <- pdp_plot_fv
+}
+
+# Print the PDP plots for each feature
+pdp_plots[["ea_fv"]]  # For example, print the PDP for the first feature
+pdp_plots[["merch_fv"]] 
+pdp_plots[["unr_fv"]]
+pdp_plots[["snk_fv"]]
+pdp_plots[["disc_fv"]]
+pdp_plots[["win_fv"]]
+pdp_plots[["stem_fv"]]
+pdp_plots[["hq_fv"]]
+
+```
+
+additional data as factors
+ea and disc stand out
+```{r}
+library(knitr)
+for(i in 1:18){
+  survey_data[,i] <- as.factor(survey_data[,i])
+}
+
+dim(survey_data)
+summary(survey_data)
+kable(summary(survey_data))
+```
+
+tiers
+coefficients very similar even after lasso, ridge, and cross validation
+v1 - top streamed
+feature selection:
+disc_ts      27.114125 - ea
+win_ts       19.009962 - ea
+mix_ts       15.690093 - hq
+ea_ts        12.803606
+--
+snk_ts       12.217301
+hq_ts        12.051637
+unr_ts       10.900175
+merch_ts      7.425253
+
+correlated:
+disc, ea
+ea, win
+mix, hq
+
+ Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ 0.1250  0.8438  1.5625  1.8602  2.4375  5.2500 
+
+base: 1.5626
+tier 1: disc ($1.49)
+tier 2: disc, ea, win ($1.99)
+tier 3: mix ($1.49)
+tier 4: mix, hq ($1.99)
+tier 5: all ($2.99)
+
+v2 - fav
+feature selection
+win_fv       31.735732 - ea, unr
+stem_fv      22.187635 - hq
+disc_fv      21.519307 - ea
+ea_fv        20.070625 - merch
+---
+unr_fv       14.368962
+merch_fv     13.645455
+hq_fv        12.878398
+snk_fv        8.037627
+
+correlated:
+disc, ea
+ea, win
+mix, hq
+unr, win
+merch, ea
+
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ 0.0000  0.5938  1.3750  1.6743  2.2812  6.1250 
+ 
+ base: $1.375
+ tier 1: win ($1.49)
+ tier 2: win, ea, unr ($1.99)
+ tier 3: mix ($1.49)
+ tier 4: mix, hq ($1.99)
+ tier 5: win, disc, ea, unr, merch ($2.99)
+ tier 6: all above ($3.49)
+ 

@@ -1,0 +1,1018 @@
+---
+title: "social media api requests"
+author: "Elena Flauto -- 505697812"
+date: "2025-01-24"
+output: pdf_document
+---
+```{r}
+#load libraries 
+library(googleAuthR)
+library(rvest)
+library(httr)
+library(jsonlite)
+library(dplyr)
+library(lubridate)
+```
+
+```{r}
+#Store data
+kworb_top_100 <- read.csv("kworb top 100 - Sheet1.csv")[, 1] # march 2023 to now
+kworb_top_100 <- kworb_top_100[-46]
+spotify_top_37_2024 <- c("Taylor Swift", "The Weeknd", "Bad Bunny", "Billie Eilish", "Ariana Grande", "Kanye West", "Peso Pluma", "Travis Scott", "Bruno Mars", "Eminem", "Sabrina Carpenter", "Lana Del Rey", "Arijit Singh", "Karol G", "Feid", "Kendrick lamar", "SZA", "Coldplay", "Junior H", "Zach Bryan", "Rihanna", "Justin Beiber", "Morgan Wallen", "Fuerza Regida", "Post Malone", "Natanael Cano", "Rauw Alejandro", "Pritam", "Metro Boomin", "Olivia Rodrigo", "Dua Lipa", "David Guetta", "Linkin Park", "Lady Gaga", "Imagine Dragons", "Ed Sheeran") # 2024
+youtube_usernames <- read.csv("youtube usernames.csv")[, 2]# gets channel id which gets chartmetric id
+youtube_usernames[31] <- "LanaDelRey"
+youtube_usernames[69] <-"BlackEyedPeas"
+youtube_usernames[92] <- "OficialDonOmar"
+youtube_usernames <- youtube_usernames[-46]
+instagram_urls <- read.csv("capstone data - instagram urls.csv")[-46,2]
+# [,2]
+# instagram_urls <- instagram_urls[-46]
+# youtube_id <- channel_ids #from username
+#chartmetric_ids # defined in cod
+# spotify_rank <- artist_pop_rank #api #input name get rank
+# spotify_monthly <- #chart #no input
+# instagram_followers <-#chart #input chart id
+# youtube_subscribers <- subscribers_count #api #input channel name
+# socials_engagement_score <- #chart #input chart id #input 
+live_data <- read.csv("capstone data - live data.csv")
+live_score <- live_data$live_score
+kworb_proportions <- read.csv("kworb proportions.csv")[, 1:8] #kworb #manual or web scrape #input overall score and spotify score in list
+# proportion_spotify <- kworb_proportions[,4] / kworb_proportions[,2]
+```
+
+```{r}
+# Assuming kworb_top_100 and kworb_proportions are already defined as shown above
+
+# Convert kworb_top_100 to a data frame for consistency and proper column names
+kworb_top_100_df <- data.frame(artist_name = kworb_top_100)
+colnames(kworb_proportions)[1] <- "artist_name"
+
+# # Assuming kworb_proportions is already a data frame like the one you provided
+# # Merge kworb_top_100 with kworb_proportions based on the artist_name column
+# aligned_data <- merge(kworb_top_100_df, kworb_proportions, by = "artist_name", all.x = TRUE)
+# 
+# # Print the resulting aligned data
+# print(aligned_data)
+
+# Merge, keeping all rows from kworb_top_100 and adding data from kworb_proportions
+merged_data <- merge(kworb_top_100_df, kworb_proportions, by = "artist_name", all.x = TRUE)
+
+# Ensure the merged data is in the same order as kworb_top_100
+merged_data <- merged_data[match(kworb_top_100_df$artist_name, merged_data$artist_name), ]
+
+proportion_spotify <- merged_data[,4]/merged_data[,2]
+proportion_spotify
+
+```
+
+```{r}
+live_data$most_recent_year <- (live_data$most_recent_year - 2023 + 10) / 10
+live_data$live_score <- live_data$most_recent_year * live_data$most_recent_type * live_data$still_touring + live_data$super_score
+live_score <- live_data$live_score
+```
+
+```{r}
+#Youtube API
+api_key <- "AIzaSyAKRrREUZ9W46S6eXGpICKqb0SgOitS_vw"
+
+# Initialize vectors to store results
+channel_ids <- character(length(youtube_usernames))  # Empty vector to store channel IDs
+subscribers_count <- numeric(length(youtube_usernames))  # Empty vector to store subscriber counts
+
+# Function to get channel ID from a channel's username
+get_channel_id <- function(username) {
+  url <- paste0("https://www.googleapis.com/youtube/v3/channels?part=id&forUsername=", username, "&key=", api_key)
+  
+  response <- GET(url)
+  data <- fromJSON(content(response, "text"))
+  
+  if (length(data$items) > 0) {
+    return(data$items$id)
+  } else {
+    return(NULL)  # Return NULL if no channel found
+  }
+}
+
+get_subscribers <- function(channel_id) {
+  url <- paste0("https://www.googleapis.com/youtube/v3/channels?part=statistics&id=", channel_id, "&key=", api_key)
+  response <- fromJSON(content(GET(url), "text"))
+  subscribers <- response$items$statistics$subscriberCount
+  return(subscribers)
+}
+
+# # Example usage:
+# username <- ""  # Replace with the actual YouTube username
+# channel_id <- get_channel_id(username)
+# cat("Channel ID for", username, "is:", channel_id, "\n")
+
+# Loop through usernames and store results in vectors
+for (i in 1:length(youtube_usernames)) {
+  username <- youtube_usernames[i]
+  
+  #Get channel ID
+  channel_id <- get_channel_id(username)
+  channel_ids[i] <- ifelse(is.null(channel_id), NA, channel_id)  # Store NA if channel not found
+
+  # Get subscriber count if channel ID exists
+  if (!is.null(channel_id)) {
+    subscribers <- get_subscribers(channel_id)
+    subscribers_count[i] <- subscribers
+  } else {
+    subscribers_count[i] <- NA  # Store NA if no channel found
+  }
+}
+
+
+channel_ids
+subscribers_count
+
+# # Example usage:
+# channel_ids <- "UCD6aIT1MqFEwscbhuqr9fqw"
+# for (channel in channel_ids) {
+#   subscribers <- get_subscribers(channel)
+#   cat("Subscribers for", channel, ":", subscribers, "\n")
+# }
+
+```
+
+
+
+
+```{r}
+#Instagram Scraping
+# library(rvest)
+
+# URL of the Instagram user's profile
+instagram_followers <- length(instagram_urls)
+
+for(i in 1:length(instagram_urls)){
+  url <- instagram_urls[i]
+  page <- read_html(url)
+  followers <- page %>%
+  html_nodes("meta[property='og:description']") %>%
+  html_attr("content")
+  followers_count <- strsplit(followers, " followers")[1]
+  followers_count <- gsub("[^0-9]", "", followers_count) # Remove non-numeric characters
+  instagram_followers[i] <- followers_count
+}
+
+
+# Read the HTML content of the page
+
+
+# Use CSS selectors to extract the follower count from the page's JavaScript
+
+
+# Extract number of followers from the description string
+
+
+print(instagram_followers)
+```
+
+```{r}
+#Chartmetric API part 1
+# Load the httr package
+library(httr)
+
+# Define the refresh token
+refresh_token <- "fXQXFgijQ9ez5pgt0ZqRrQu1BPE4GTxK2m1W3e7yAKKDirzfpZUNZj5UTklZlaSo"
+
+# Define the API URL
+url <- "https://api.chartmetric.com/api/token"
+
+# Make the POST request to retrieve the access token
+response <- POST(
+  url,
+  body = list(refreshtoken = refresh_token),
+  encode = "json",  # Specify the body encoding format as JSON
+  add_headers("Content-Type" = "application/json")  # Add the required header
+)
+
+# Check if the request was successful
+if (status_code(response) == 200) {
+  # Parse the response JSON to extract the access token
+  token_data <- content(response, "parsed")
+  access_token <- token_data$token
+  cat("Access Token: ", access_token, "\n")
+} else {
+  cat("Error retrieving access token. Status code: ", status_code(response), "\n")
+}
+
+
+``` 
+
+```{r}
+#Chartmetric API Part 2
+#get chartmetric artist ID from youtube id
+
+library(httr)
+library(jsonlite)
+
+# Function to get Chartmetric Artist ID from YouTube Channel ID
+get_chartmetric_id_from_youtube <- function(youtube_channel_id) {
+  # Construct the API URL with the YouTube Channel ID
+  url <- paste0("https://api.chartmetric.com/api/artist/youtube/", youtube_channel_id, "/get-ids")
+  
+  # Send GET request to the Chartmetric API
+  response <- GET(
+    url,
+    add_headers(Authorization = paste("Bearer", access_token))
+  )
+  
+  # Check if the request was successful
+  if (status_code(response) == 200) {
+    # Parse the JSON response
+    data <- content(response, "parsed")
+    
+    # Extract the Chartmetric Artist ID
+    # print(data)
+    chartmetric_artist_id <- data$obj
+    
+    # Return the Chartmetric Artist ID
+    return(chartmetric_artist_id)
+  } else {
+    # If there's an error, print the status code and response content
+    cat("Error:", status_code(response), "\n")
+    cat("Response:", content(response, "text"), "\n")
+    return(NULL)
+  }
+}
+
+# # Example usage:
+youtube_channel_id <- "UCByOQJjav0CUDwxCk-jVNRQ"  # Replace with the actual YouTube Channel ID
+chartmetric_artist_id <- get_chartmetric_id_from_youtube(youtube_channel_id)
+
+chartmetric_ids <- character(length(youtube_usernames))
+
+# Loop through usernames and store results in vectors
+for (i in 1:length(youtube_usernames)) {
+  youtube_channel_id <- channel_ids[i]
+  chartmetric_id <- get_chartmetric_id_from_youtube(youtube_channel_id)
+  chartmetric_ids[i] <- ifelse(is.null(chartmetric_id), NA, chartmetric_id)
+  chartmetric_ids[i] <- chartmetric_ids[[i]]$cm_artist
+}
+
+chartmetric_ids <- unlist(chartmetric_ids)
+chartmetric_ids
+
+```
+
+
+```{r}
+# Chartmetric API Part 3 - Instagram engagement rates
+# Load necessary libraries
+
+# Function to get Instagram engagement rate for an artist over the past year
+get_monthly_instagram_engagement_rate <- function(artist_id, access_token) {
+  
+  # Calculate the start and end dates for the past year
+  end_date <- Sys.Date()  # Current date (today)
+  start_date <- as.Date(format(Sys.Date() - 365, "%Y-%m-%d"))  # 1 year ago
+  
+  # Prepare to collect results
+  all_engagement_data <- list()
+  
+  # Loop through each month within the past year
+  current_date <- start_date
+  while (current_date < end_date) {
+    # Define the start and end date for the current month
+    month_end <- as.Date(format(current_date + months(1) - 1, "%Y-%m-%d"))
+    if (month_end > end_date) {
+      month_end <- end_date
+    }
+    
+    # Construct the API URL
+    url <- paste0("https://api.chartmetric.com/api/artist/", artist_id, "/social-audience-stats")
+    
+    # Set parameters
+    params <- list(
+      domain = "instagram",              # Social media platform (Instagram)
+      audienceType = "followers",        # Audience type (followers)
+      statsType = "stat",                # Type of statistic (followers, likes, etc.)
+      since = format(current_date, "%Y-%m-%d"),  # Start date (ISO date format)
+      until = format(month_end, "%Y-%m-%d"),    # End date (ISO date format)
+      limit = 50,                        # Optional: limit the number of entries
+      offset = 0                         # Optional: offset for pagination
+    )
+    
+    # Send GET request to the Chartmetric API with the access token
+    response <- GET(
+      url,
+      query = params,                    # Parameters as a query
+      add_headers(Authorization = paste("Bearer", access_token))  # Authorization header
+    )
+    
+    # Check the response status code
+    if (status_code(response) == 200) {
+      # Parse the JSON response
+      data <- content(response, "parsed", simplifyDataFrame = TRUE)
+      
+      # Extract the Instagram engagement data (assuming the 'obj' field contains the data)
+      engagement_data <- data$obj
+      
+      # Add the engagement data for the current month to the list
+      all_engagement_data <- append(all_engagement_data, list(engagement_data))
+      
+      # Move to the next month
+      current_date <- month_end + 1
+    } else {
+      # If there's an error, print the error message
+      cat("Error: ", status_code(response), "\n")
+      cat("Message: ", content(response, "text"), "\n")  # Display full error message
+      return(NULL)
+    }
+  }
+  
+  # Combine all the engagement data into one dataframe
+  df <- do.call(rbind, lapply(all_engagement_data, as.data.frame))
+  
+  # Parse the timestamp to extract the month and year
+  df$timestp <- as.Date(df$timestp)
+  df$month <- format(df$timestp, "%Y-%m")  # Extract Year-Month
+  
+  # Aggregate engagement rate by month (average of engagement rates in each month)
+  monthly_engagement <- df %>%
+    group_by(month) %>%
+    summarize(average_engagement_rate = mean(engagement_rate, na.rm = TRUE))  # Calculate the monthly average
+  
+  # Return the monthly engagement rates
+  return(monthly_engagement)
+}
+
+# Example usage:
+# Replace with actual artist ID and your access token
+artist_ids <- c(2316, 2762, 3380, 135326, 3648, 4215, 1845, 1546, 308, 4132, 2838, 3986, 3870, 2289, 2796, 87, 204948, 4796, 748, 178, 3747, 4298, 199, 207242, 1450, 27, 1806)
+artist_id <- 1806
+# for(i in 1:length(artist_ids)){
+#   artist_id <- artist_ids[i]
+#   monthly_engagement_rate <- get_monthly_instagram_engagement_rate(artist_id, access_token)
+#   annual_avg_engagement_rate[i] <- mean(monthly_engagement_rate$average_engagement_rate, na.rm = TRUE)
+# }
+
+# print(annual_avg_engagement_rate)
+
+# Call the function to get monthly engagement rates
+monthly_engagement_rate <- get_monthly_instagram_engagement_rate(artist_id, access_token)
+#
+# # Print the result (monthly engagement rates)
+print(monthly_engagement_rate)
+# Assuming monthly_engagement_rate is already calculated from the previous code
+# The data should have columns `month` and `average_engagement_rate`
+
+# Calculate the annual average engagement rate by averaging the monthly rates
+annual_avg_engagement_rate <- mean(monthly_engagement_rate$average_engagement_rate, na.rm = TRUE)
+
+
+# # Print the result
+cat("The annual average engagement rate in 2024 is:", annual_avg_engagement_rate, "\n")
+
+```
+
+```{r}
+engagement_rates <- c(1.358048, 2.210638, 1.083175, 2.217683, 1.141767, 3.870708, 4.698937, 0.3434221, 1.038006, 2.094398, 0.6001345, 15.16655, 2.87461, 7.941482, 1.089268, 1.38625, NA, 0.9892275, 1.945552, 1.170116, 20.32988, 0.4088449, 0.2478682, 2.018132, 0.1807422, 1.893967, 0.9111316)
+
+# Initialize a new vector of the same length as chartmetric_ids, with NA initially
+aligned_rates <- rep(NA, length(chartmetric_ids))
+
+# Find indices of non-empty chartmetric_ids
+non_empty_indices <- which(chartmetric_ids != "")
+
+# Assign engagement rates to these positions, ensuring alignment
+aligned_rates[non_empty_indices] <- engagement_rates[1:length(non_empty_indices)]
+
+# Print the new vector
+print(aligned_rates)
+
+```
+
+
+```{r}
+# #Chartmetric API Artist URLs
+# 
+# # Function to get the Chartmetric Artist URLs based on the artist's ID
+# get_artist_urls <- function(artist_id) {
+#   # Construct the API URL for the artist's URLs using their ID
+#   url <- paste0("https://api.chartmetric.com/api/artist/", artist_id, "/urls")
+#   
+#   # Send GET request to retrieve artist's URLs data with the access token in the Authorization header
+#   response <- GET(
+#     url,
+#     add_headers(Authorization = paste("Bearer", access_token))
+#   )
+#   
+#   # Check if the request was successful
+#   if (status_code(response) == 200) {
+#     # Parse the JSON response
+#     data <- content(response, "parsed")
+#     
+#     # Print the response (list of URLs by domain)
+#     return(data$obj)
+#   } else {
+#     # If there's an error, print the status code and the response content for debugging
+#     cat("Error: ", status_code(response), "\n")
+#     cat("Response: ", content(response, "text"), "\n")
+#     return(NULL)
+#   }
+# }
+# 
+# # Example usage:
+# artist_id <- 3380  # Replace with the artist ID you're looking for (e.g., Drake's ID)
+# artist_urls <- get_artist_urls(artist_id)
+# 
+# # If URLs were found, print them
+# if (!is.null(artist_urls)) {
+#   cat("URLs for Artist ID", artist_id, ":\n")
+#   print(artist_urls)
+# }
+
+```
+
+```{r}
+# #chartmetric fan metrics
+# # Load necessary libraries
+# library(httr)
+# library(jsonlite)
+# 
+# # Function to get engagement data (followers, popularity, etc.) for an artist
+# get_chartmetric_engagement_data <- function(artist_id, access_token, source = "spotify", 
+#                                             since_date = "2020-01-01", until_date = Sys.Date(), 
+#                                             field = "followers") {
+#   
+#   # Construct the API URL
+#   url <- paste0("https://api.chartmetric.com/api/artist/", artist_id, "/stat/", source)
+#   
+#   # Set parameters
+#   params <- list(
+#     since = since_date,  # Start date (ISO format)
+#     until = until_date,  # End date (ISO format)
+#     field = field,       # Field to fetch (e.g., "followers", "popularity")
+#     latest = "false"     # Set to true for latest data point, otherwise it will use the date range
+#   )
+#   
+#   # Send GET request to the Chartmetric API with the access token
+#   response <- GET(
+#     url,
+#     query = params,                                # Parameters
+#     add_headers(Authorization = paste("Bearer", access_token))  # Authorization header
+#   )
+#   
+#   # Check the response status code
+#   if (status_code(response) == 200) {
+#     # Parse the JSON response
+#     data <- content(response, "parsed", simplifyDataFrame = TRUE)
+#     
+#     # Extract relevant fields (followers, popularity, etc.)
+#     followers_data <- data$obj$followers
+#     popularity_data <- data$obj$popularity
+#     print(data$obj)
+#     
+#     # If you need the followers data
+#     followers <- followers_data$value
+#     followers_weekly_diff <- followers_data$weekly_diff
+#     followers_monthly_diff <- followers_data$monthly_diff
+#     followers_timestp <- followers_data$timestp
+#     
+#     # If you need the popularity data
+#     popularity <- popularity_data$value
+#     popularity_weekly_diff <- popularity_data$weekly_diff
+#     popularity_monthly_diff <- popularity_data$monthly_diff
+#     popularity_timestp <- popularity_data$timestp
+#     
+#     # Return the extracted data as a list
+#     return(list(followers = followers, 
+#                 followers_weekly_diff = followers_weekly_diff,
+#                 followers_monthly_diff = followers_monthly_diff,
+#                 followers_timestp = followers_timestp,
+#                 popularity = popularity,
+#                 popularity_weekly_diff = popularity_weekly_diff,
+#                 popularity_monthly_diff = popularity_monthly_diff,
+#                 popularity_timestp = popularity_timestp))
+#   } else {
+#     # If there's an error, print the error message
+#     cat("Error: ", status_code(response), "\n")
+#     cat("Message: ", content(response, "text"), "\n")  # Display full error message
+#     return(NULL)
+#   }
+# }
+# 
+# # Example usage
+# # Replace with actual artist ID and access token
+# artist_id <- 3380  # Example Chartmetric Artist ID (replace with actual artist ID)
+# 
+# # Get Spotify engagement data (followers and popularity)
+# engagement_data <- get_chartmetric_engagement_data(artist_id, access_token, 
+#                                                    source = "spotify", 
+#                                                    since_date = "2020-01-01", 
+#                                                    until_date = "2020-01-12")
+# 
+# # Print the data
+# if (!is.null(engagement_data)) {
+#   cat("Followers: ", engagement_data$followers, "\n")
+#   cat("Followers Weekly Diff: ", engagement_data$followers_weekly_diff, "\n")
+#   cat("Followers Monthly Diff: ", engagement_data$followers_monthly_diff, "\n")
+#   cat("Followers Timestamp: ", engagement_data$followers_timestp, "\n")
+#   
+#   cat("\nPopularity: ", engagement_data$popularity, "\n")
+#   cat("Popularity Weekly Diff: ", engagement_data$popularity_weekly_diff, "\n")
+#   cat("Popularity Monthly Diff: ", engagement_data$popularity_monthly_diff, "\n")
+#   cat("Popularity Timestamp: ", engagement_data$popularity_timestp, "\n")
+# }
+
+```
+
+```{r}
+#Chartmetric API spotify monthly
+library(httr)
+library(jsonlite)
+# Function to get artists based on social index (like Spotify Monthly Listeners, Instagram Followers, etc.)
+get_artists_by_social_index <- function(sort_by, limit = 100, offset = 1, recent_release_within = 99999999999999) {
+  # Construct the API URL
+  url <- paste0("https://api.chartmetric.com/api/artist/anr/by/social-index?sortBy=", sort_by,
+                "&limit=", limit,
+                "&offset=", offset,
+                "&recentReleaseWithin=", recent_release_within)
+  
+  # Send GET request to fetch artist data
+  response <- GET(
+    url,
+    add_headers(Authorization = paste("Bearer", access_token))
+  )
+  
+  # Check if the request was successful
+  if (status_code(response) == 200) {
+    # Parse the JSON response
+    data <- content(response, "parsed")
+    
+    # Return the 'obj' part of the response, which contains the artist data
+    return(data$obj)
+  } else {
+    # If there's an error, print the status code and response content
+    cat("Error:", status_code(response), "\n")
+    cat("Response:", content(response, "text"), "\n")
+    return(NULL)
+  }
+}
+
+# Example usage:
+# Get artists sorted by Spotify Monthly Listeners
+social_index_data <- get_artists_by_social_index(sort_by = "spotify_monthly_listeners", limit = 100, offset = 1)
+
+# If data is available, print it
+if (!is.null(social_index_data)) {
+  # Print the name and Spotify followers count of each artist
+  for (artist in social_index_data) {
+    cat("Artist Name:", artist$name, "\n")
+    cat("Spotify Followers:", artist$sp_followers, "\n")
+    cat("Spotify Monthly Listeners:", artist$weekInsights$value, "\n\n")
+  }
+}
+
+# Initialize empty vectors to store the data
+artist_names <- c()
+spotify_followers <- c()
+spotify_monthly_listeners <- c()
+
+# Example usage:
+# Get artists sorted by Spotify Monthly Listeners
+social_index_data <- get_artists_by_social_index(sort_by = "spotify_monthly_listeners", limit = 100, offset = 1)
+
+# If data is available, store the information in vectors
+if (!is.null(social_index_data)) {
+  for (artist in social_index_data) {
+    # Append data to vectors
+    artist_names <- c(artist_names, artist$name)
+    spotify_followers <- c(spotify_followers, artist$sp_followers)
+    spotify_monthly_listeners <- c(spotify_monthly_listeners, artist$weekInsights$value)
+  }
+}
+
+# # Check the stored data
+# cat("Artist Names:", artist_names, "\n")
+# cat("Spotify Followers:", spotify_followers, "\n")
+# cat("Spotify Monthly Listeners:", spotify_monthly_listeners, "\n")
+
+
+```
+
+```{r}
+artist_names
+spotify_followers
+spotify_monthly_listeners
+spotify_monthly_data <- cbind(artist_names, spotify_followers, spotify_monthly_listeners)
+
+# Initialize an empty data frame to store the combined information
+combined_data <- data.frame(
+  artist_name = character(0),
+  spotify_followers = numeric(0),
+  spotify_monthly_listeners = numeric(0)
+)
+
+# Loop over the artist names to match with kworb_top_100
+for (i in seq_along(artist_names)) {
+  # Check if artist is in kworb_top_100
+  if (artist_names[i] %in% kworb_top_100) {
+    # If there's a match, collect the data
+    artist_name <- artist_names[i]
+    spotify_followers_val <- spotify_followers[i]
+    spotify_monthly_listeners_val <- spotify_monthly_listeners[i]
+    
+    # Combine the data into a new row
+    combined_data <- rbind(combined_data, data.frame(
+      artist_name = artist_name,
+      spotify_followers = spotify_followers_val,
+      spotify_monthly_listeners = spotify_monthly_listeners_val
+    ))
+  }
+}
+
+# Print the combined data
+print(combined_data)
+
+final_data <- data.frame(
+  artist_name = kworb_top_100,
+  spotify_followers = rep(NA, length(kworb_top_100)),
+  spotify_monthly_listeners = rep(NA, length(kworb_top_100))
+)
+
+# Loop through each artist in kworb_top_100 and match with the combined_data
+for (i in 1:length(kworb_top_100)) {
+  artist <- kworb_top_100[i]
+  
+  # Find matching artist in combined_data
+  match_index <- which(combined_data$artist_name == artist)
+  
+  # If a match is found, update the corresponding row in final_data
+  if (length(match_index) > 0) {
+    final_data$spotify_followers[i] <- combined_data$spotify_followers[match_index]
+    final_data$spotify_monthly_listeners[i] <- combined_data$spotify_monthly_listeners[match_index]
+  }
+}
+
+# Print the final aligned data
+print(final_data)
+
+```
+
+```{r}
+# Spotify part 1
+library(httr)
+library(jsonlite)
+
+# Set your client credentials
+client_id <- "9c1a455fbe7c4d99a45ad2f1789dd80c"
+client_secret <- "21293fa04d9847c391e2d7420b760827"
+
+# Function to get the access token using Client Credentials Flow
+get_access_token <- function(client_id, client_secret) {
+  url <- "https://accounts.spotify.com/api/token"
+  
+  # Make the POST request to obtain the access token
+  response <- POST(
+    url,
+    body = list(grant_type = "client_credentials"),  # Make sure grant_type is specified
+    authenticate(client_id, client_secret),  # Automatically adds the Basic Authentication header
+    encode = "form"
+  )
+  
+  # Print raw response for debugging
+  print(content(response, "text"))
+  
+  # Check if the request was successful
+  if (status_code(response) != 200) {
+    stop("Error obtaining access token: ", content(response, "text"))
+  }
+  
+  # Parse the JSON response to get the access token
+  token_data <- fromJSON(content(response, "text"))
+  
+  # Return the access token
+  return(token_data$access_token)
+}
+
+access_token <- get_access_token(client_id, client_secret)
+```
+
+```{r}
+# Spotify part 2
+# Function to get the artist's popularity, followers, genres, and Spotify link
+get_artist_popularity <- function(artist_name, access_token) {
+  url <- paste0("https://api.spotify.com/v1/search?q=", URLencode(artist_name), "&type=artist")
+  
+  # Make the GET request to search for the artist
+  response <- GET(url, add_headers(Authorization = paste("Bearer", access_token)))
+  
+  # Print raw response for debugging
+  raw_response <- content(response, "text")
+  # print("Raw Response from Artist Search:")
+  # print(raw_response)
+  
+  # Check if the request was successful
+  if (status_code(response) != 200) {
+    stop("Error with search request: ", raw_response)
+  }
+  
+  # Parse the JSON response
+  data <- fromJSON(raw_response)
+  
+  # Print the structure of the parsed response for better insight
+  # print("Structure of Parsed Response Data:")
+  # str(data)
+  
+  # Check if the artists list is available and contains items
+  if (length(data$artists$items) > 0) {
+    # Access the first artist in the list
+    artist <- data$artists$items[1, ]
+    
+    # Print the artist object to confirm its contents
+    # print("Extracted Artist Object:")
+    # print(artist)
+    
+    # Return the artist's data
+    return(artist$popularity)
+    # return(list(
+    #   name = ifelse(!is.null(artist$name), artist$name, "N/A"),
+    #   popularity = ifelse(!is.null(artist$popularity), artist$popularity, "N/A"),
+    #   followers = ifelse(!is.null(artist$followers$total), artist$followers$total, "N/A"),
+    #   genres = ifelse(length(artist$genres) > 0, paste(artist$genres, collapse = ", "), "N/A"),
+    #   spotify_link = ifelse(!is.null(artist$external_urls$spotify), artist$external_urls$spotify, "N/A")
+    # ))
+  } else {
+    # If no artists are found, return NULL
+    print("No artists found in response.")
+    return(NULL)
+  }
+}
+
+artist_pop_rank <- numeric(length(kworb_top_100))
+
+for(i in 1:length(kworb_top_100)){
+  artist_name <- kworb_top_100[i]
+artist_info <- get_artist_popularity(artist_name, access_token)
+artist_pop_rank[i] <- ifelse(is.null(artist_info), NA, artist_info)
+}
+
+artist_pop_rank
+
+# # Check the result and print it
+# if (!is.null(artist_info)) {
+#   print("Artist Info:")
+#   print(artist_info)
+# } else {
+#   print("No artist found.")
+# }
+
+
+```
+
+
+```{r}
+length(kworb_top_100)
+length(artist_pop_rank)
+proportion_spotify <- proportion_spotify[-46]
+length(proportion_spotify)
+length(final_data$spotify_followers)
+length(final_data$spotify_monthly_listeners)
+length(youtube_usernames)
+length(channel_ids)
+length(subscribers_count)
+chartmetric_ids[68:99] <- NA
+length(chartmetric_ids)
+length(instagram_urls)
+length(instagram_followers)
+aligned_rates[68:99] <- NA
+length(aligned_rates)
+live_score <- live_score[-46]
+length(live_score)
+```
+
+```{r}
+
+full_data_table <- cbind(kworb_top_100, artist_pop_rank, proportion_spotify, final_data$spotify_followers, final_data$spotify_monthly_listeners, youtube_usernames, channel_ids, chartmetric_ids, subscribers_count, instagram_urls, instagram_followers, aligned_rates, live_score)
+library(tidyverse)
+tibble_data <- as_tibble(full_data_table)
+print(tibble_data)
+```
+
+```{r}
+library(tidyr)
+clean_data <- drop_na(tibble_data)
+clean_data
+
+tibble_data_2 <- as_tibble(full_data_table[,-c(4,5)])
+clean_data_2 <- drop_na(tibble_data_2)
+
+
+clean_data_2 <- clean_data_2 %>%
+  mutate(monthly_listeners = c(89433621, 86845825, 74236296, 69545833, 69129305, 71669551, 66102111, 59837435, 58077087, 55040913)) #taken feb 5 2025 
+
+clean_data_2 <- clean_data_2 %>%
+  mutate(instagram_followers = c(150000000, 282000000, 143000000, 27000000, 48400000, 58800000, 20800000, 20400000, 26300000, 7700000))
+
+clean_data_2
+
+#spotify_2024_rank <- c(21, 1, 3, 25, 36, 8, 6, 12, NA, NA)
+#10 of the top 50 streamed artists in 2024
+```
+```{r}
+#superfan formula
+
+
+clean_data_2 <- clean_data_2 %>%
+  mutate(across(c(instagram_followers, subscribers_count, aligned_rates, live_score, artist_pop_rank, proportion_spotify), as.numeric))
+
+clean_data_2 <- clean_data_2 %>%
+  mutate(live_multiplier = (1+(live_score/6)))
+
+clean_data_2 <- clean_data_2 %>%
+  mutate(spotify_socials_ratio_1 = monthly_listeners/instagram_followers)
+
+clean_data_2 <- clean_data_2 %>%
+  mutate(spotify_socials_ratio_2 = monthly_listeners/subscribers_count)
+
+#superfans_lb <- subscribers_count + instagram_followers * aligned_rates/100
+clean_data_2 <- clean_data_2 %>%
+  mutate(superfans_lb = monthly_listeners * .01)
+
+
+
+clean_data_2 <- clean_data_2 %>%
+  mutate(superfans_est = superfans_lb + ((instagram_followers * (aligned_rates / 100) + subscribers_count*(aligned_rates / 100)) * live_multiplier * proportion_spotify))
+
+clean_data_2 <- clean_data_2 %>%
+  mutate(superfans_ub = monthly_listeners * .1)
+
+clean_data_2
+
+
+```
+```{r}
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+
+min_superfans <- min(clean_data_2$superfans_lb, clean_data_2$superfans_est, clean_data_2$superfans_ub, na.rm = TRUE)
+max_superfans <- max(clean_data_2$superfans_lb, clean_data_2$superfans_est, clean_data_2$superfans_ub, na.rm = TRUE)
+
+# Assuming clean_data_2 is your tibble
+
+# Create the plot
+ggplot(clean_data_2) +
+  # Add bar graph for artist_pop_rank
+  geom_bar(aes(x = kworb_top_100, y = monthly_listeners), stat = "identity", fill = "#1ED760", alpha = 0.7) +
+  
+  # Add line graph for superfans_lb
+  geom_line(aes(x = kworb_top_100, y = superfans_lb, group = 1), color = "#000000", size = 1) +
+  
+  # Add line graph for superfans_est
+  geom_line(aes(x = kworb_top_100, y = superfans_est, group = 1), color = "#1ED760", size = 1) +
+  
+  # Add line graph for superfans_ub
+  geom_line(aes(x = kworb_top_100, y = superfans_ub, group = 1), color = "#ff66c4", size = 1) +
+
+  # Create y-axis
+  scale_y_continuous(
+    name = "Monthly Listeners",
+    labels = scales::label_comma(scale = 1e-6)
+  ) +
+  
+  # scale_y_continuous(
+  #   name = "Monthly Listeners",
+  #   labels = scales::label_comma(scale = 1e-6),
+  #   limits = c(min_superfans, max_superfans * 1.1),  # Zoom in on the lines portion (with a small margin above max)
+  #   breaks = seq(min_superfans, max_superfans, by = (max_superfans - min_superfans) / 5)  # Adjust break intervals for clarity
+  # ) +
+  
+  # Customize plot appearance
+  theme_minimal() +
+  labs(
+    title = "Spotify Monthly Listeners vs Superfans",
+    x = "Artists",
+    y = "Monthly Listeners (Millions)"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate x axis labels for readability
+    axis.title.x = element_text(margin = margin(t = 10)),  # Add margin to x-axis title
+    axis.title.y = element_text(margin = margin(r = 10))   # Add margin to y-axis title
+  )
+
+```
+
+```{r}
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+
+min_superfans <- min(clean_data_2$superfans_lb, clean_data_2$superfans_est, clean_data_2$superfans_ub, na.rm = TRUE)
+max_superfans <- max(clean_data_2$superfans_lb, clean_data_2$superfans_est, clean_data_2$superfans_ub, na.rm = TRUE)
+
+# Assuming clean_data_2 is your tibble
+
+# Create the plot
+ggplot(clean_data_2) +
+  # Add bar graph for artist_pop_rank
+  geom_bar(aes(x = kworb_top_100, y = monthly_listeners), stat = "identity", fill = "#1ED760", alpha = 0.7) +
+  
+  # Add line graph for superfans_lb
+  geom_line(aes(x = kworb_top_100, y = superfans_lb, group = 1), color = "#000000", size = 1) +
+  
+  # Add line graph for superfans_est
+  geom_line(aes(x = kworb_top_100, y = superfans_est, group = 1), color = "#1ED760", size = 1) +
+  
+  # Add line graph for superfans_ub
+  geom_line(aes(x = kworb_top_100, y = superfans_ub, group = 1), color = "#ff66c4", size = 1) +
+  
+  # # Create dual y-axes
+  # scale_y_continuous(
+  #   name = "Monthly Listeners",
+  #   labels = scales::label_comma(scale = 1e-6)
+  # ) +
+  
+  scale_y_continuous(
+    name = "Monthly Listeners (Millions)",
+    labels = scales::label_comma(scale = 1e-6),
+    limits = c(min_superfans, max_superfans * 1.1),  # Zoom in on the lines portion (with a small margin above max)
+    breaks = seq(min_superfans, max_superfans, by = (max_superfans - min_superfans) / 5)  # Adjust break intervals for clarity
+  ) +
+  
+  # Customize plot appearance
+  theme_minimal() +
+  labs(
+    title = "Estimated Spotify Superfans",
+    x = "Artists",
+    y = "Monthly Listeners"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate x axis labels for readability
+    axis.title.x = element_text(margin = margin(t = 10)),  # Add margin to x-axis title
+    axis.title.y = element_text(margin = margin(r = 10))   # Add margin to y-axis title
+  )
+
+```
+tiers
+```{r}
+#v1 tiers
+# tier 1: disc ($1.49)
+# tier 2: disc, ea, win ($1.99)
+# tier 3: mix ($1.49)
+# tier 4: mix, hq ($1.99)
+# tier 5: all ($2.99)
+
+#v2 tiers
+# tier 1: win ($1.49)
+# tier 2: win, ea, unr ($1.99)
+# tier 3: mix ($1.49)
+# tier 4: mix, hq ($1.99)
+# tier 5: win, disc, ea, unr, merch ($2.99)
+# tier 6: all above ($3.49)
+
+# Prices for Version 1 (V1)
+v1_prices <- c(1.49, 1.99, 1.49, 1.99, 2.99)  # Prices for tiers 1, 2, 3, 4, 5 in V1
+
+# Prices for Version 2 (V2)
+v2_prices <- c(1.49, 1.99, 1.49, 1.99, 2.99, 3.49)  # Prices for tiers 1, 2, 3, 4, 5, 6 in V2
+
+clean_data_2 %>%
+  summarise(total_superfans_lb = sum(superfans_lb, na.rm = TRUE))
+
+clean_data_2 %>%
+  summarise(total_superfans_est = sum(superfans_est, na.rm = TRUE))
+
+clean_data_2 %>%
+  summarise(total_superfans_ub = sum(superfans_ub, na.rm = TRUE))
+
+superfan_levels <- c(6999180, 20712707, 69991798)
+```
+projected revenue
+
+version 1
+```{r}
+revenue_matrix <- outer(v1_prices, superfan_levels, FUN = "*")
+
+# Convert the matrix into a tibble for better readability
+library(tibble)
+revenue_table <- as_tibble(revenue_matrix, 
+                           .name_repair = "unique") %>%
+  setNames(c("superfan_lb", "superfan_est", "superfan_ub")) %>%
+  mutate(v1_prices = 1:5) %>%
+  select(v1_prices, everything())
+
+# View the result
+print(revenue_table)
+
+```
+version 2
+```{r}
+revenue_matrix_2 <- outer(v2_prices, superfan_levels, FUN = "*")
+
+# Convert the matrix into a tibble for better readability
+library(tibble)
+revenue_table_2 <- as_tibble(revenue_matrix_2, 
+                           .name_repair = "unique") %>%
+  setNames(c("superfan_lb", "superfan_est", "superfan_ub")) %>%
+  mutate(v2_prices = 1:6) %>%
+  select(v2_prices, everything())
+
+# View the result
+print(revenue_table_2)
+
+```

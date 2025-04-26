@@ -1,0 +1,947 @@
+---
+title: "capstone graphics"
+author: "Elena Flauto -- 505697812"
+date: "2025-02-27"
+output: html_document
+---
+
+
+spotify monthly listeners vs superfans
+```{r}
+artist <- c("Rihanna", "Taylor Swift", "Drake", "Post Malone", "Ed Sheeran", "Travis Scott", "Kanye West", "Lana Del Rey", "Future", "Arctic Monkeys")
+artist_pop_rank <- c(89, 96, 94, 87, 86, 92, 91, 89, 90, 86)
+proportion_spotify <- c(0.5825123, 0.3007220, 0.1887383, 0.3560732, 0.2743191, 0.4069675, 0.2828467, 0.2898551, 0.1045752, 0.6523810)
+spotify_monthly_listeners <- c(89433621, 86845825, 74236296,69545833, 69129305, 71669551, 66102111, 59837435, 58077087, 55040913)
+subscribers_count <- c(44100000, 60600000, 30500000, 27900000, 55800000, 19500000, 11400000, 16800000, 14200000, 8670000)
+instagram_followers <- c(1.50e+08, 2.82e+08, 1.43e+08, 2.70e+07, 4.84e+07, 5.88e+07, 2.08e+07, 2.04e+07, 2.63e+07, 7.70e+06)
+engagement_rates <- c(1.358048, 2.210638, 1.083175, 2.217683, 1.141767, 3.870708, 4.698937, 15.166550, 2.874610, 7.941482)
+live_score <- c(0.0, 6.0, 2.7, 1.8, 6.0, 2.7, 3.6, 1.8, 2.0, 2.0)
+full_data_table <- cbind(artist, artist_pop_rank, proportion_spotify, spotify_monthly_listeners, subscribers_count, instagram_followers, engagement_rates, live_score)
+library(tidyverse)
+tibble_data <- as_tibble(full_data_table)
+print(tibble_data)
+
+library(tidyr)
+clean_data <- drop_na(tibble_data)
+clean_data
+
+
+clean_data <- clean_data %>%
+  mutate(monthly_listeners = c(89433621, 86845825, 74236296, 69545833, 69129305, 71669551, 66102111, 59837435, 58077087, 55040913)) #taken feb 5 2025 
+
+clean_data <- clean_data %>%
+  mutate(instagram_followers = c(150000000, 282000000, 143000000, 27000000, 48400000, 58800000, 20800000, 20400000, 26300000, 7700000))
+
+clean_data
+
+#spotify_2024_rank <- c(21, 1, 3, 25, 36, 8, 6, 12, NA, NA)
+#10 of the top 50 streamed artists in 2024
+
+#superfan formula
+
+
+clean_data <- clean_data %>%
+  mutate(across(c(instagram_followers, subscribers_count, engagement_rates, live_score, artist_pop_rank, proportion_spotify), as.numeric))
+
+clean_data <- clean_data %>%
+  mutate(live_multiplier = (1+(live_score/6)))
+
+
+#superfans_lb <- subscribers_count + instagram_followers * aligned_rates/100
+clean_data <- clean_data %>%
+  mutate(superfans_lb = monthly_listeners * .01)
+
+
+
+clean_data <- clean_data %>%
+  mutate(superfans_est = superfans_lb + ((instagram_followers * (engagement_rates / 100) + subscribers_count*(engagement_rates / 100)) * live_multiplier * proportion_spotify))
+
+clean_data <- clean_data %>%
+  mutate(superfans_ub = monthly_listeners * .1)
+
+clean_data
+
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+
+min_superfans <- min(clean_data$superfans_lb, clean_data$superfans_est, clean_data$superfans_ub, na.rm = TRUE)
+max_superfans <- max(clean_data$superfans_lb, clean_data$superfans_est, clean_data$superfans_ub, na.rm = TRUE)
+
+# Assuming clean_data_2 is your tibble
+
+# Create the plot
+ggplot(clean_data) +
+  # Add bar graph for artist_pop_rank
+  geom_bar(aes(x = artist, y = monthly_listeners), stat = "identity", fill = "#1ED760", alpha = 0.7) +
+  
+  # Add line graph for superfans_lb
+  geom_line(aes(x = artist, y = superfans_lb, group = 1), color = "#000000", size = 1) +
+  
+  # Add line graph for superfans_est
+  geom_line(aes(x = artist, y = superfans_est, group = 1), color = "purple", size = 1) +
+  
+  # Add line graph for superfans_ub
+  geom_line(aes(x = artist, y = superfans_ub, group = 1), color = "#ff66c4", size = 1) +
+
+  # Create y-axis
+  scale_y_continuous(
+    name = "Monthly Listeners (Millions)",
+    labels = scales::label_comma(scale = 1e-6)
+  ) +
+  
+  # scale_y_continuous(
+  #   name = "Monthly Listeners",
+  #   labels = scales::label_comma(scale = 1e-6),
+  #   limits = c(min_superfans, max_superfans * 1.1),  # Zoom in on the lines portion (with a small margin above max)
+  #   breaks = seq(min_superfans, max_superfans, by = (max_superfans - min_superfans) / 5)  # Adjust break intervals for clarity
+  # ) +
+  
+  # Customize plot appearance
+  theme_minimal() +
+  labs(
+    title = "Spotify Monthly Listeners vs Superfans",
+    x = "Artists",
+    y = "Monthly Listeners (Millions)"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate x axis labels for readability
+    axis.title.x = element_text(margin = margin(t = 10)),  # Add margin to x-axis title
+    axis.title.y = element_text(margin = margin(r = 10))   # Add margin to y-axis title
+  )
+
+
+
+ggplot(clean_data) +
+  # Add bar graph for artist_pop_rank
+  geom_bar(aes(x = artist, y = monthly_listeners), stat = "identity", fill = "#1ED760", alpha = 0.7) +
+  
+  # Add line graph for superfans_lb
+  geom_line(aes(x = artist, y = superfans_lb, group = 1), color = "#000000", size = 1) +
+  
+  # Add line graph for superfans_est
+  geom_line(aes(x = artist, y = superfans_est, group = 1), color = "#1ed760", size = 1) +
+  
+  # Add line graph for superfans_ub
+  geom_line(aes(x = artist, y = superfans_ub, group = 1), color = "#ff66c4", size = 1) +
+  
+  # # Create dual y-axes
+  # scale_y_continuous(
+  #   name = "Monthly Listeners",
+  #   labels = scales::label_comma(scale = 1e-6)
+  # ) +
+  
+  scale_y_continuous(
+    name = "Monthly Listeners (Millions)",
+    labels = scales::label_comma(scale = 1e-6),
+    limits = c(min_superfans, max_superfans * 1.1),  # Zoom in on the lines portion (with a small margin above max)
+    breaks = seq(min_superfans, max_superfans, by = (max_superfans - min_superfans) / 5)  # Adjust break intervals for clarity
+  ) +
+  
+  # Customize plot appearance
+  theme_minimal() +
+  labs(
+    title = "Estimated Spotify Superfans",
+    x = "Artists",
+    y = "Monthly Listeners"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate x axis labels for readability
+    axis.title.x = element_text(margin = margin(t = 10)),  # Add margin to x-axis title
+    axis.title.y = element_text(margin = margin(r = 10))   # Add margin to y-axis title
+  )
+
+
+```
+```{r}
+library(knitr)
+library(tools)
+
+parameters <- c(
+  "Artist Popularity Rank", 
+  "Proportion of Listeners on Spotify", 
+  "Spotify Followers", 
+  "Spotify Monthly Listeners", 
+  "YouTube Usernames and Subscriber Counts", 
+  "Chartmetric IDs", 
+  "Annual Average Instagram Engagement Rate", 
+  "Instagram Followers and URLs", 
+  "Most Recent Tour Year", 
+  "Most Recent Tour Size", 
+  "Active Touring", 
+  "Bonus", 
+  "Top 100 Artists", 
+  "Top 37 Spotify Artists"
+)
+
+sources <- c(
+  "(Spotify)", 
+  "(Kworb)", 
+  "(Spotify)", 
+  "(Spotify)", 
+  "(YouTube)", 
+  "(Chartmetric)", 
+  "(Charmetric)", 
+  "(Instagram)", 
+  "(Pollstar)", 
+  "(Determined Rank)", 
+  "(Manual)", 
+  "(Pollstar)",  
+  "(Kworb)", 
+  "(Spotify)"
+)
+
+information <- c(
+  "Assigned by Spotify", 
+  "Artists' Spotify Listeners divided by Overall", 
+  "", 
+  "", 
+  "", 
+  "", 
+  "Average Instagram engagement rate for the artist in 2024", 
+  "", 
+  "The most recent year in which the artist went on tour", 
+  "Assigned value (1-5) based on venue capacities, with 5 being the greatest", 
+  "Binary value indicating whether the artist is still touring", 
+  "Bonus for artists who had a top-grossing or top-attended major tour", 
+  "Globally as of Jan 2025", 
+  "Globally as of 2024"
+)
+
+methods <- c(
+  "Spotify API", 
+  "Web Scraping", 
+  "Spotify API", 
+  "Spotify API", 
+  "YouTube API", 
+  "Chartmetric API", 
+  "Chartmetric API", 
+  "Web Scraping", 
+  "Pollstar", 
+  "Pollstar", 
+  "Manual", 
+  "Pollstar", 
+  "Web Scraping", 
+  "Spotify"
+)
+
+parameter_data <- data.frame(
+  Parameters = parameters,
+  Source = sources,
+  Information = information,
+  Method = methods
+)
+
+# Create the pretty table with a title
+kable(parameter_data, caption = "Data Collected")
+
+```
+
+tiers
+coefficients very similar even after lasso, ridge, and cross validation
+v1 - top streamed
+feature selection:
+disc_ts      27.114125 - ea
+win_ts       19.009962 - ea
+mix_ts       15.690093 - hq
+ea_ts        12.803606
+--
+snk_ts       12.217301
+hq_ts        12.051637
+unr_ts       10.900175
+merch_ts      7.425253
+
+correlated:
+disc, ea
+ea, win
+mix, hq
+
+ Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ 0.1250  0.8438  1.5625  1.8602  2.4375  5.2500 
+
+base: 1.5626
+tier 1: disc ($1.49)
+tier 2: disc, ea, win ($1.99)
+tier 3: mix ($1.49)
+tier 4: mix, hq ($1.99)
+tier 5: all ($2.99)
+
+v2 - fav
+feature selection
+win_fv       31.735732 - ea, unr
+stem_fv      22.187635 - hq
+disc_fv      21.519307 - ea
+ea_fv        20.070625 - merch
+---
+unr_fv       14.368962
+merch_fv     13.645455
+hq_fv        12.878398
+snk_fv        8.037627
+
+correlated:
+disc, ea
+ea, win
+mix, hq
+unr, win
+merch, ea
+
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ 0.0000  0.5938  1.3750  1.6743  2.2812  6.1250 
+ 
+ base: $1.375
+ tier 1: win ($1.49)
+ tier 2: win, ea, unr ($1.99)
+ tier 3: mix ($1.49)
+ tier 4: mix, hq ($1.99)
+ tier 5: win, disc, ea, unr, merch ($2.99)
+ tier 6: all above ($3.49)
+ 
+
+```{r}
+# Prices for Version 1 (V1)
+v1_prices <- c(1.49, 1.99, 1.49, 1.99, 2.99)  # Prices for tiers 1, 2, 3, 4, 5 in V1
+
+# Prices for Version 2 (V2)
+v2_prices <- c(1.49, 1.99, 1.49, 1.99, 2.99, 3.49)  # Prices for tiers 1, 2, 3, 4, 5, 6 in V2
+
+clean_data %>%
+  summarise(total_superfans_lb = sum(superfans_lb, na.rm = TRUE))
+
+clean_data %>%
+  summarise(total_superfans_est = sum(superfans_est, na.rm = TRUE))
+
+clean_data %>%
+  summarise(total_superfans_ub = sum(superfans_ub, na.rm = TRUE))
+
+superfan_levels <- c(6999180, 20712707, 69991798)
+```
+version 1
+```{r}
+revenue_matrix <- outer(v1_prices, superfan_levels, FUN = "*")
+
+# Convert the matrix into a tibble for better readability
+library(tibble)
+revenue_table <- as_tibble(revenue_matrix, 
+                           .name_repair = "unique") %>%
+  setNames(c("revenue_lb", "revenue_est", "revenue_ub")) %>%
+  mutate(v1_prices = 1:5) %>%
+  select(v1_prices, everything())
+
+# View the result
+colnames(revenue_table) <- c("Price Tiers", "Revenue Lower Bound", "Estimated Revenue", "Revenue Upper Bound")
+print(revenue_table)
+
+```
+version 2
+```{r}
+revenue_matrix_2 <- outer(v2_prices, superfan_levels, FUN = "*")
+
+# Convert the matrix into a tibble for better readability
+library(tibble)
+revenue_table_2 <- as_tibble(revenue_matrix_2, 
+                           .name_repair = "unique") %>%
+  setNames(c("revenue_lb", "revenue_est", "revenue_ub")) %>%
+  mutate(v2_prices = 1:6) %>%
+  select(v2_prices, everything())
+
+# View the result
+
+colnames(revenue_table_2) <- c("Price Tiers", "Revenue Lower Bound", "Estimated Revenue", "Revenue Upper Bound")
+print(revenue_table_2)
+```
+
+
+
+```{r}
+library(knitr)
+
+revenue_table$`Price Tiers` <- c("$1.49", "$1.99", "$1.49", "$1.99", "$2.99")
+revenue_table$`Revenue Lower Bound` <- paste0("$", format(revenue_table$`Revenue Lower Bound`, big.mark = ","))
+revenue_table$`Estimated Revenue` <- paste0("$", format(revenue_table$`Estimated Revenue`, big.mark = ","))
+revenue_table$`Revenue Upper Bound` <- paste0("$", format(revenue_table$`Revenue Upper Bound`, big.mark = ","))
+
+kable(revenue_table, align = "l", caption = "Revenue Projections - Top-Streamed")
+
+revenue_table_2$`Price Tiers` <- c("$1.49", "$1.99", "$1.49", "$1.99", "$2.99", "$3.49")
+revenue_table_2$`Revenue Lower Bound` <- paste0("$", format(revenue_table_2$`Revenue Lower Bound`, big.mark = ","))
+revenue_table_2$`Estimated Revenue` <- paste0("$", format(revenue_table_2$`Estimated Revenue`, big.mark = ","))
+revenue_table_2$`Revenue Upper Bound` <- paste0("$", format(revenue_table_2$`Revenue Upper Bound`, big.mark = ","))
+
+kable(revenue_table_2, align = "l", caption = "Revenue Projections - Favorite Artists")
+```
+Ideal Tier Model - Top-Streamed
+```{r}
+kable(revenue_table[c(2, 5), ], align = "l", caption = "Proposed Tiers and Revenue Projections - Top-Streamed")
+```
+Ideal Tier Model - Favorite Artists
+```{r}
+kable(revenue_table_2[c(2, 5, 6), ], align = "l", caption = "Proposed Tiers and Revenue Projections - Favorite Artists")
+```
+
+Figure 4: Spotify Average Revenue per User by Year
+Show average revenue per user 2015 to 2023 (business of apps)
+Year	Average revenue per user (€)
+2015	6.84
+2016	6.2
+2017	5.32
+2018	4.89
+2019	4.86
+2020	4.41
+2021	4.29
+2022	4.54
+2023	4.27
+2024	4.62
+** add observation - potential revenue per use 2025
+```{r}
+ARPU_2024 <- 4.80  # Example ARPU for 2024 in USD
+existing_users_2024 <- 675000000  # Total users for 2024
+new_users_contributing <- 20712707 *5  # Users contributing the new revenue
+#monthly_revenue_new_users_usd <- ((4.80+1.99)*0.90*new_users_contributing + (4.80+2.99)*0.08*new_users_contributing + (4.80+3.49)*0.02*new_users_contributing) / new_users_contributing # Monthly revenue from new users (USD)
+monthly_revenue_new_users_usd <- ((4.80+1.99)*0.75*new_users_contributing + (4.80+2.99)*0.2*new_users_contributing + (4.80+3.49)*0.05*new_users_contributing) / new_users_contributing # Monthly revenue from new users (USD)
+
+# Calculate the remaining users
+remaining_users_2025 <- existing_users_2024 - new_users_contributing
+
+# Revenue from remaining users (using 2024 ARPU)
+monthly_revenue_remaining_users <- remaining_users_2025 * ARPU_2024  # Monthly revenue from remaining users
+
+# Calculate ARPU for 2025
+ARPU_2025 <- 4.80*(remaining_users_2025/existing_users_2024) + (monthly_revenue_new_users_usd)*(new_users_contributing/existing_users_2024)
+
+# Display ARPU for 2025
+ARPU_2025 <- round(ARPU_2025, 2)
+ARPU_2025
+
+apple_music_users <- 88e6
+amazon_music_users <- 82e6
+youtube_music_users <- 80e6
+
+# Calculate 1% of each user base
+one_percent_apple <- 0.01 * apple_music_users
+one_percent_amazon <- 0.01 * amazon_music_users
+one_percent_youtube <- 0.01 * youtube_music_users
+ 
+# Fan Tier 1 price and months in a year
+fan_tier_price <- 1.99
+months_per_year <- 12
+revenue_apple <- one_percent_apple * fan_tier_price * months_per_year
+revenue_amazon <- one_percent_amazon * fan_tier_price * months_per_year
+revenue_youtube <- one_percent_youtube * fan_tier_price * months_per_year
+
+total_additional_revenue <- revenue_apple + revenue_amazon + revenue_youtube
+total_additional_revenue
+
+```
+
+```{r}
+# Data for Spotify Average Revenue per User by Year in EUR
+average_revenue_per_user <- data.frame(
+  Year = c(2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024),
+  Average_Revenue_per_User_Euro = c(6.84, 6.20, 5.32, 4.89, 4.86, 4.41, 4.29, 4.54, 4.27, 4.62)
+)
+
+# Assuming the exchange rate is 1 EUR = 1.10 USD
+exchange_rate <- 1.04
+
+# Converting from EUR to USD
+average_revenue_per_user$Average_Revenue_per_User_Euro <- round(average_revenue_per_user$Average_Revenue_per_User_Euro * exchange_rate, 2)
+average_revenue_per_user$Average_Revenue_per_User_Euro <- as.numeric(average_revenue_per_user$Average_Revenue_per_User_Euro)
+colnames(average_revenue_per_user) <- c("Year", "ARPU")
+
+library(ggplot2)
+ggplot(average_revenue_per_user, aes(x = Year, y = ARPU)) +
+  geom_point(color = "#1ED760", size = 3) +  # Adding red dots at each point
+  geom_line(color = "#1ED760", size = 1) +  # Line graph with blue color and width of 1
+  labs(
+    title = "Average Revenue per User Over Time",
+    x = "Year",
+    y = "ARPU (USD)"
+  ) +
+  scale_x_continuous(
+    breaks = average_revenue_per_user$Year,  # Show every year on the x-axis
+    labels = as.character(average_revenue_per_user$Year)  # Customize the labels (you can modify this to show specific formats)
+  ) +
+  theme_minimal() +  # Minimal theme for better aesthetics
+  theme(
+    plot.title = element_text(hjust = 0.5),  # Center the title
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels
+  )
+
+library(knitr)
+average_revenue_per_user$Year <- as.factor(average_revenue_per_user$Year)
+average_revenue_per_user$ARPU <- paste0("$", format(average_revenue_per_user$ARPU, big.mark = ","))
+# kable(average_revenue_per_user, align = "l", caption = "Average Revenue per User (USD)")
+
+#add observation - potential revenue per user 2025
+
+```
+
+```{r}
+# WITHOUT GETTING ANY NEW USERS OR DOING ANYTHING ELSE
+# REASON FOR LOW AMT IS REGIONAL PRICING + 
+# DOESN'T ACC FOR FREE USERS MOVING FROM PREMIUM TO THIS (JUST PREMIUM TO THIS)
+# DISCUSS W RESPECT TO REGION AND COUNTRY GRAPHS
+# Data for Spotify Average Revenue per User by Year in EUR
+average_revenue_per_user <- data.frame(
+  Year = c(2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024),
+  Average_Revenue_per_User_Euro = c(6.84, 6.20, 5.32, 4.89, 4.86, 4.41, 4.29, 4.54, 4.27, 4.62)
+)
+
+# Assuming the exchange rate is 1 EUR = 1.04 USD
+exchange_rate <- 1.04
+
+# Converting from EUR to USD
+average_revenue_per_user$Average_Revenue_per_User_Euro <- round(average_revenue_per_user$Average_Revenue_per_User_Euro * exchange_rate, 2)
+average_revenue_per_user$Average_Revenue_per_User_Euro <- as.numeric(average_revenue_per_user$Average_Revenue_per_User_Euro)
+colnames(average_revenue_per_user) <- c("Year", "ARPU")
+
+# Add 2025 ARPU 
+average_revenue_per_user <- rbind(average_revenue_per_user, data.frame(Year = 2025, ARPU = ARPU_2025))
+average_revenue_per_user$Color <- ifelse(average_revenue_per_user$Year == 2025, "#ff66c4", "#1ED760")
+
+# Plot the data
+library(ggplot2)
+ggplot(average_revenue_per_user, aes(x = Year, y = ARPU)) +
+  geom_line(color = "#1ED760", size = 1) +  # Line graph with green color and width of 1
+  geom_point(aes(color = Color), size = 3) +  # Adding green dots at each point
+  labs(
+    title = "Average Revenue per User Over Time",
+    x = "Year",
+    y = "ARPU (USD)"
+  ) +
+  scale_x_continuous(
+    breaks = average_revenue_per_user$Year,  # Show every year on the x-axis
+    labels = as.character(average_revenue_per_user$Year)  # Customize the labels (you can modify this to show specific formats)
+  ) +
+  theme_minimal() +  # Minimal theme for better aesthetics
+  scale_color_identity() + 
+  theme(
+    plot.title = element_text(hjust = 0.5),  # Center the title
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels
+  ) +
+geom_text(
+    data = subset(average_revenue_per_user, Year == 2025),  # Filter for the 2025 data point
+    aes(label = paste0("$", format(ARPU, big.mark = ","))),
+    vjust = -1,  # Adjust vertical position of the label
+    hjust = 0.5,  # Adjust horizontal position of the label
+    color = "#000000",  # Label color to match the point color
+    size = 3  # Adjust label size
+  )
+
+# Create a table with the updated data (including 2025)
+library(knitr)
+average_revenue_per_user$ARPU <- paste0("$", format(average_revenue_per_user$ARPU, big.mark = ","))
+# kable(average_revenue_per_user, align = "l", caption = "Average Revenue per User (USD)")
+
+
+```
+```{r}
+#superfan tier projection
+ARPU_2024 <- 4.80  # Example ARPU for 2024 in USD
+existing_users_2024 <- 675000000  # Total users for 2024
+new_users_contributing <- 20712707*5  # Users contributing the new revenue
+#monthly_revenue_new_users_usd <- ((4.80+1.99)*0.90*new_users_contributing + (4.80+2.99)*0.08*new_users_contributing + (4.80+3.49)*0.02*new_users_contributing) / new_users_contributing # Monthly revenue from new users (USD)
+monthly_revenue_new_users_usd <- ((4.80+1.99)*0.75*new_users_contributing + (4.80+2.99)*0.2*new_users_contributing + (4.80+3.49)*0.05*new_users_contributing) # Monthly revenue from new users (USD)
+annual_revenue_new_users <- monthly_revenue_new_users_usd * 12
+
+# Calculate the remaining users
+remaining_users_2025 <- existing_users_2024 - new_users_contributing
+
+# Revenue from remaining users (using 2024 ARPU)
+monthly_revenue_remaining_users <- remaining_users_2025 * ARPU_2024  # Monthly revenue from remaining users
+annual_revenue_remaining_users <- monthly_revenue_remaining_users* 12
+
+total_projected_annual_revenue_2025 <- annual_revenue_new_users + 15620000000 # = 24400116497
+total_projected_annual_revenue_2025
+```
+Figure 3: Spotify Total, Premium Subscriber, and Ad-supported Revenue by Year
+** add point for superfan tier projection 2025: ($24400116497)
+Spotify revenue 2016 to 2024 ($bn) -boa
+Year	Revenue (€bn)
+2016	2.94
+2017	4.62
+2018	5.25
+2019	6.76
+2020	7.88
+2021	9.66
+2022	11.72
+2023	13.24
+2024	15.62
+
+Here is a table displaying the Spotify revenue through Ad-supported users by year:
+demandsage
+Year	Revenue
+2024 (Up to Q3)	€1.32 billion + .5b Q4
+2023	€1.681 billion
+2022	€1.476 billion
+2021	€1.208 billion
+2020	€745 million
+2019	€678 million
+2018	€542 million
+2017	€416 million
+2016	€295 million
+2015	€196 million
+
+Here is a table displaying Spotify’s revenue through Premium subscribers by year:
+Year	Revenue
+2024 (Up to Q3)	€10.12 billion + 3.705 Q4
+2023	€11.566 billion
+2022	€10.25 billion
+2021	€8.46 billion
+2020	€7.13 billion
+2019	€6.086 billion
+2018	€4.717 billion
+2017	€3.67 billion
+2016	€2.657 billion
+2015	€1.74 billion
+2014	€982.7 million
+2013	€677.89 million
+2012	€374.6 million
+
+```{r}
+# Revenue data (in EUR)
+total_revenue_usd <- c(2.94, 4.62, 5.25, 6.76, 7.88, 9.66, 11.72, 13.24, 15.62)  # Total revenue in EUR (2016-2024)
+ad_supported_revenue_eur <- c(0.295, 0.416, 0.542, 0.678, 0.745, 1.208, 1.476, 1.681, 1.85)  # Ad-supported revenue in EUR (2016-2024)
+premium_revenue_eur <- c(2.657, 3.67, 4.717, 6.086, 7.13, 8.46, 10.25, 11.566, 10.12+3.705)  # Premium revenue in EUR (2016-2024)
+
+# Conversion rate from EUR to USD
+exchange_rate <- 1.04
+
+# Convert from EUR to USD
+ad_supported_revenue_usd <- ad_supported_revenue_eur * exchange_rate
+premium_revenue_usd <- premium_revenue_eur * exchange_rate
+
+# Data frame for Spotify revenues
+years <- 2016:2024
+revenues <- data.frame(
+  Year = years,
+  Total_Revenue = total_revenue_usd,
+  Ad_Supported_Revenue = ad_supported_revenue_usd,
+  Premium_Revenue = premium_revenue_usd
+)
+
+
+# Plot the data
+library(ggplot2)
+
+ggplot(revenues, aes(x = Year)) +
+  geom_line(aes(y = Total_Revenue, color = "Total Revenue"), size = 1) +
+  geom_point(aes(y = Total_Revenue, color = "Total Revenue"), size = 3) +  # Add points to Total Revenue line
+  geom_line(aes(y = Ad_Supported_Revenue, color = "Ad-Supported Revenue"), size = 1) +
+  geom_point(aes(y = Ad_Supported_Revenue, color = "Ad-Supported Revenue"), size = 3) +  # Add points to Ad-Supported Revenue line
+  geom_line(aes(y = Premium_Revenue, color = "Premium Revenue"), size = 1) +
+  geom_point(aes(y = Premium_Revenue, color = "Premium Revenue"), size = 3) +  # Add points to Premium Revenue line
+  labs(
+    title = "Spotify Revenue by Type (in Billions USD)",
+    x = "Year",
+    y = "Revenue (USD Billions)"
+  ) +
+  scale_color_manual(values = c(
+    "Total Revenue" = "#1ED760", 
+    "Ad-Supported Revenue" = "#000000", 
+    "Premium Revenue" = "purple", 
+    "Superfan Tier" = "#ff66c4"  # Same color for Premium Revenue and Superfan Tier
+  ), aesthetics = "color") +
+  scale_x_continuous(
+    breaks = seq(2016, 2025, by = 1),  # Show every year
+    labels = as.character(2016:2025)  # Customize the labels
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  guides(color = guide_legend(title = "Revenue Type"))
+
+# Print the data table
+library(knitr)
+revenues$Total_Revenue <- paste0("$", format(revenues$Total_Revenue, big.mark = ","))
+revenues$Ad_Supported_Revenue <- paste0("$", format(revenues$Ad_Supported_Revenue, big.mark = ","))
+revenues$Premium_Revenue <- paste0("$", format(revenues$Premium_Revenue, big.mark = ","))
+# kable(revenues, align = "l", caption = "Spotify Revenue by Year (USD)")
+
+```
+
+```{r}
+# Revenue data (in EUR)
+total_revenue_usd <- c(2.94, 4.62, 5.25, 6.76, 7.88, 9.66, 11.72, 13.24, 15.62)  # Total revenue in EUR (2016-2024)
+ad_supported_revenue_eur <- c(0.295, 0.416, 0.542, 0.678, 0.745, 1.208, 1.476, 1.681, 1.85)  # Ad-supported revenue in EUR (2016-2024)
+premium_revenue_eur <- c(2.657, 3.67, 4.717, 6.086, 7.13, 8.46, 10.25, 11.566, 10.12+3.705)  # Premium revenue in EUR (2016-2024)
+
+# Conversion rate from EUR to USD
+exchange_rate <- 1.04
+
+# Convert from EUR to USD
+ad_supported_revenue_usd <- ad_supported_revenue_eur * exchange_rate
+premium_revenue_usd <- premium_revenue_eur * exchange_rate
+
+# Data frame for Spotify revenues
+years <- 2016:2024
+revenues <- data.frame(
+  Year = years,
+  Total_Revenue = total_revenue_usd,
+  Ad_Supported_Revenue = ad_supported_revenue_usd,
+  Premium_Revenue = premium_revenue_usd
+)
+
+
+# Add the Superfan Tier projection and Premium Revenue for 2025
+revenues <- rbind(revenues, data.frame(
+  Year = 2025,
+  Total_Revenue = total_projected_annual_revenue_2025/1000000000,  # Already in billions
+  Ad_Supported_Revenue = NA,  # Not provided for Superfan Tier
+  Premium_Revenue = premium_revenue_usd[9] + (annual_revenue_new_users/1000000000) # Premium Revenue for 2025
+))
+
+# Plot the data
+library(ggplot2)
+
+ggplot(revenues, aes(x = Year)) +
+  geom_line(aes(y = Total_Revenue, color = "Total Revenue"), size = 1) +
+  geom_point(aes(y = Total_Revenue, color = "Total Revenue"), size = 3) +  # Add points to Total Revenue line
+  geom_line(aes(y = Ad_Supported_Revenue, color = "Ad-Supported Revenue"), size = 1) +
+  geom_point(aes(y = Ad_Supported_Revenue, color = "Ad-Supported Revenue"), size = 3) +  # Add points to Ad-Supported Revenue line
+  geom_line(aes(y = Premium_Revenue, color = "Premium Revenue"), size = 1) +
+  geom_point(aes(y = Premium_Revenue, color = "Premium Revenue"), size = 3) +  # Add points to Premium Revenue line
+  geom_point(data = subset(revenues, Year == 2025), aes(y = Total_Revenue, color = "Superfan Tier"), size = 3) + 
+  geom_point(data = subset(revenues, Year == 2025), aes(y = Premium_Revenue, color = "Superfan Tier"), size = 3) +  # Same color for Premium 2025
+  labs(
+    title = "Spotify Revenue by Type (in Billions USD)",
+    x = "Year",
+    y = "Revenue (USD Billions)",
+    fill = "Revenue Type"
+  ) +
+  scale_color_manual(values = c(
+    "Total Revenue" = "#1ED760", 
+    "Ad-Supported Revenue" = "#000000", 
+    "Premium Revenue" = "purple", 
+    "Superfan Tier" = "#ff66c4"  
+  )) +
+  scale_x_continuous(
+    breaks = seq(2016, 2025, by = 1),  # Show every year
+    labels = as.character(2016:2025)  # Customize the labels
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  guides(color = guide_legend(title = "Revenue Type"))
+
+# Print the data table
+library(knitr)
+revenues$Total_Revenue <- paste0("$", format(revenues$Total_Revenue, big.mark = ","))
+revenues$Ad_Supported_Revenue <- paste0("$", format(revenues$Ad_Supported_Revenue, big.mark = ","))
+revenues$Premium_Revenue <- paste0("$", format(revenues$Premium_Revenue, big.mark = ","))
+# kable(revenues, align = "l", caption = "Spotify Revenue by Year (USD)")
+
+```
+
+figure 2: spotify users and subscribers by region - bo
+Spotify users by region 2016 to 2023 (mm)
+Year	Europe	North America	Latin America	Rest of World
+2016	40	36	20	8
+2017	51	46	28	13
+2018	66	56	38	20
+2019	83	65	49	35
+2020	102	77	66	54
+2021	124	88	80	73
+2022	138	97	95	103
+2023	159	111	116	165
+2024	169	107	138	212
+
+Spotify subscribers by region 2018 to 2024 (mm)
+Year	Europe	North America	Latin America	Rest of World
+2018	33	26	17	7
+2019	43	32	22	11
+2020	54	40	29	15
+2021	66	48	33	18
+2022	73	54	39	22
+2023	86	62	46	26
+2024	92	64	55	35
+
+```{r}
+# Data for Spotify Users by Region (2016-2024)
+users_data <- data.frame(
+  Year = 2016:2024,
+  Europe = c(40, 51, 66, 83, 102, 124, 138, 159, 169),
+  North_America = c(36, 46, 56, 65, 77, 88, 97, 111, 107),
+  Latin_America = c(20, 28, 38, 49, 66, 80, 95, 116, 138),
+  Rest_of_World = c(8, 13, 20, 35, 54, 73, 103, 165, 212)
+)
+
+# Data for Spotify Subscribers by Region (2018-2024)
+subscribers_data <- data.frame(
+  Year = 2018:2024,
+  Europe = c(33, 43, 54, 66, 73, 86, 92),
+  North_America = c(26, 32, 40, 48, 54, 62, 64),
+  Latin_America = c(17, 22, 29, 33, 39, 46, 55),
+  Rest_of_World = c(7, 11, 15, 18, 22, 26, 35)
+)
+
+colnames(users_data) <- c("Year", "Europe", "North America", "Latin America", "Rest of World")
+colnames(subscribers_data) <- c("Year", "Europe", "North America", "Latin America", "Rest of World")
+
+# Loading knitr library
+library(knitr)
+
+# Create the kable for Spotify Users by Region
+kable(users_data, align = "l", caption = "Spotify Users by Region (Millions)")
+
+# Create the kable for Spotify Subscribers by Region
+kable(subscribers_data, align = "l", caption = "Spotify Subscribers by Region (Millions)")
+
+```
+
+```{r}
+# Load necessary libraries
+library(tidyr)
+library(ggplot2)
+
+# Data for Spotify Users by Region (2016-2024)
+users_data <- data.frame(
+  Year = 2016:2024,
+  Europe = c(40, 51, 66, 83, 102, 124, 138, 159, 169),
+  North_America = c(36, 46, 56, 65, 77, 88, 97, 111, 107),
+  Latin_America = c(20, 28, 38, 49, 66, 80, 95, 116, 138),
+  Rest_of_World = c(8, 13, 20, 35, 54, 73, 103, 165, 212)
+)
+
+# Data for Spotify Subscribers by Region (2018-2024)
+subscribers_data <- data.frame(
+  Year = 2018:2024,
+  Europe = c(33, 43, 54, 66, 73, 86, 92),
+  North_America = c(26, 32, 40, 48, 54, 62, 64),
+  Latin_America = c(17, 22, 29, 33, 39, 46, 55),
+  Rest_of_World = c(7, 11, 15, 18, 22, 26, 35)
+)
+
+# Reshape Users Data to Long Format
+users_data_long <- pivot_longer(users_data, 
+                                cols = -Year, 
+                                names_to = "Region", 
+                                values_to = "Users")
+
+# Reshape Subscribers Data to Long Format
+subscribers_data_long <- pivot_longer(subscribers_data, 
+                                      cols = -Year, 
+                                      names_to = "Region", 
+                                      values_to = "Subscribers")
+
+# Add "Type" column to differentiate Users vs Subscribers
+users_data_long$Type <- "Users"
+subscribers_data_long$Type <- "Subscribers"
+
+# Debugging step: Check the column names to ensure they match before combining
+print("Users Data Columns:")
+print(colnames(users_data_long))
+print("Subscribers Data Columns:")
+print(colnames(subscribers_data_long))
+
+# Ensure the column names are consistent
+colnames(users_data_long) <- c("Year", "Region", "value", "Type")
+colnames(subscribers_data_long) <- c("Year", "Region", "value", "Type")
+
+# Combine Users and Subscribers Data
+combined_data <- rbind(users_data_long, subscribers_data_long)
+
+combined_data$Region <- gsub("_", " ", combined_data$Region)
+
+# Check the first few rows of the combined data to ensure everything looks correct
+print("Combined Data:")
+head(combined_data)
+
+# Plotting the Histogram
+ggplot(combined_data, aes(x = Year, y = value, fill = Type)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.4) +  # Use dodge to separate the bars
+  scale_fill_manual(values = c("Users" = "#1ED760", "Subscribers" = "purple")) +  # Custom colors for users and subscribers
+  facet_wrap(~ Region, scales = "free_y", labeller = label_value) +  # Separate by region, allow different y-axis scales
+  labs(title = "Spotify Users vs. Subscribers by Region (2016-2024)",
+       x = "Year",
+       y = "Millions",
+       fill = "Type") +
+  scale_x_continuous(
+    breaks = 2016:2024,  # Show every year
+    labels = as.character(2016:2024)
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
+
+```
+
+figure 1: music users and user demographics by country - potentially unnecessary
+
+Nation	Gen Z	Millennials	Gen X	Boomers
+Brazil	87%	89%	73%	63%
+Mexico	83%	87%	81%	75%
+Colombia	84%	88%	76%	69%
+Argentina	87%	89%	77%	58%
+Chile	91%	92%	78%	72%
+France	84%	68%	53%	37%
+Spain	82%	78%	74%	57%
+UK	77%	79%	67%	41%
+Italy	77%	76%	59%	40%
+Germany	83%	78%	59%	37%
+Japan	89%	70%	51%	34%
+US	99%	98%	96%	89%
+
+Over half of Sweden’s population uses a paid music streaming service (IFPI)
+According to IFPI, Sweden is the most engaged country in terms of paid music subscriptions with 61% of the population falling under this description.
+
+Here are the top five nations:
+
+Sweden – 61%
+Mexico – 57%
+Germany – 55%
+USA – 53%
+New Zealand – 52%
+```{r}
+# Create a new dataset for the top 5 countries with highest paid music streaming percentages
+top5_countries <- data.frame(
+  Nation = c("Sweden", "Mexico", "Germany", "USA", "New Zealand"),
+  Percentage = c(61, 57, 55, 53, 52)
+)
+
+# Plot top 5 countries with custom hex colors for each country
+ggplot(top5_countries, aes(x = reorder(Nation, -Percentage), y = Percentage, fill = "#1ed760")) +
+  geom_bar(stat = "identity", fill = "#1ed760", col = NA) +
+  labs(title = "Top 5 Countries with Paid Music Streaming Service Usage",
+       x = "Country", y = "Percentage") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme_minimal()
+```
+
+```{r}
+# Load necessary libraries
+library(ggplot2)
+library(reshape2)
+
+# Create the dataset
+data <- data.frame(
+  Nation = c("Brazil", "Mexico", "Colombia", "Argentina", "Chile", "France", 
+             "Spain", "UK", "Italy", "Germany", "Japan", "US"),
+  Gen_Z = c(87, 83, 84, 87, 91, 84, 82, 77, 77, 83, 89, 99),
+  Millennials = c(89, 87, 88, 89, 92, 68, 78, 79, 76, 78, 70, 98),
+  Gen_X = c(73, 81, 76, 77, 78, 53, 74, 67, 59, 59, 51, 96),
+  Boomers = c(63, 75, 69, 58, 72, 37, 57, 41, 40, 37, 34, 89)
+)
+
+# Melt the data for plotting
+data_melted <- melt(data, id.vars = "Nation", variable.name = "Generation", value.name = "Percentage")
+data_melted$Generation <- gsub("_", " ", data_melted$Generation)
+
+# Plot histogram using ggplot with hex color codes
+ggplot(data_melted, aes(x = Nation, y = Percentage, fill = Generation)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Percentage of Each Generation Using Paid Music Streaming Service",
+       x = "Country", y = "Percentage") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),  # Tilt x-axis labels at 45 degrees
+    plot.title = element_text(hjust = 0.5)) +
+  scale_fill_manual(values = c("Gen Z" = "#1ed760", 
+                               "Millennials" = "#ff66c4", 
+                               "Gen X" = "purple", 
+                               "Boomers" = "orange")) +  # Custom hex colors
+  theme_minimal()
+
+```
+
